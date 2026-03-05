@@ -1,189 +1,130 @@
 #!/usr/bin/env node
 /**
- * AlphaMind Lite - 投资组合分析
- * 支持多币种持仓，计算总价值、分布、风险
+ * AlphaMind Lite - Portfolio Analyzer
+ * 投资组合分析工具
  */
 
 const https = require('https');
 
-// 获取币种价格
-function fetchPrice(symbol) {
+const PORTFOLIO = [
+  { symbol: 'BTC', amount: 0.5, avgPrice: 70000 },
+  { symbol: 'ETH', amount: 2.0, avgPrice: 2000 },
+  { symbol: 'BNB', amount: 5.0, avgPrice: 600 },
+  { symbol: 'SOL', amount: 10.0, avgPrice: 80 },
+];
+
+// HTTP request with timeout
+function fetchWithTimeout(url, timeout = 5000) {
   return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.binance.com',
-      path: `/api/v3/ticker/24hr?symbol=${symbol}USDT`,
-      method: 'GET'
-    };
-
-    const req = https.request(options, (res) => {
+    const req = https.get(url, (res) => {
       let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          reject(e);
-        }
-      });
+      res.on('data', c => data += c);
+      res.on('end', () => resolve(data));
     });
-
+    req.setTimeout(timeout, () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
     req.on('error', reject);
-    req.end();
   });
 }
 
-// 投资组合配置
-const portfolio = {
-  // 币种配置: 数量, 平均成本价
-  BTC: { quantity: 0.5, avgCost: 68000 },
-  ETH: { quantity: 5, avgCost: 3200 },
-  BNB: { quantity: 20, avgCost: 580 },
-  SOL: { quantity: 50, avgCost: 120 },
-  XRP: { quantity: 5000, avgCost: 0.52 },
-  ADA: { quantity: 10000, avgCost: 0.45 }
-};
-
-// 计算单个币种持仓
-async function calculateHolding(symbol, holding) {
+async function getPrice(symbol) {
   try {
-    const priceData = await fetchPrice(symbol);
-    const currentPrice = parseFloat(priceData.lastPrice);
-    const costBasis = holding.quantity * holding.avgCost;
-    const currentValue = holding.quantity * currentPrice;
-    const pnl = currentValue - costBasis;
-    const pnlPercent = (pnl / costBasis) * 100;
-    const change24h = parseFloat(priceData.priceChangePercent);
-
-    return {
-      symbol,
-      quantity: holding.quantity,
-      avgCost: holding.avgCost,
-      currentPrice,
-      costBasis,
-      currentValue,
-      pnl,
-      pnlPercent,
-      change24h
-    };
-  } catch (e) {
-    // Demo 数据
-    const demoPrices = { BTC: 73500, ETH: 3350, BNB: 620, SOL: 145, XRP: 0.58, ADA: 0.48 };
-    const currentPrice = demoPrices[symbol] || 1;
-    const costBasis = holding.quantity * holding.avgCost;
-    const currentValue = holding.quantity * currentPrice;
-    const pnl = currentValue - costBasis;
-    const pnlPercent = (pnl / costBasis) * 100;
-
-    return {
-      symbol,
-      quantity: holding.quantity,
-      avgCost: holding.avgCost,
-      currentPrice,
-      costBasis,
-      currentValue,
-      pnl,
-      pnlPercent,
-      change24h: 0,
-      demo: true
-    };
-  }
-}
-
-// 计算组合统计
-function calculatePortfolioStats(holdings) {
-  const totalValue = holdings.reduce((sum, h) => sum + h.currentValue, 0);
-  const totalCost = holdings.reduce((sum, h) => sum + h.costBasis, 0);
-  const totalPnl = totalValue - totalCost;
-  const totalPnlPercent = (totalPnl / totalCost) * 100;
-
-  // 计算分布
-  const distribution = holdings.map(h => ({
-    symbol: h.symbol,
-    percent: (h.currentValue / totalValue) * 100,
-    value: h.currentValue
-  })).sort((a, b) => b.percent - a.percent);
-
-  // 风险指标
-  const avgChange24h = holdings.reduce((sum, h) => sum + Math.abs(h.change24h), 0) / holdings.length;
-  const volatility = avgChange24h > 5 ? '高 🔴' : avgChange24h > 2 ? '中 🟡' : '低 🟢';
-
-  return { totalValue, totalCost, totalPnl, totalPnlPercent, distribution, volatility, avgChange24h };
-}
-
-// 打印报告
-function printPortfolioReport(holdings, stats) {
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('           📊 投资组合分析报告');
-  console.log('═══════════════════════════════════════════════════════\n');
-
-  // 持仓明细
-  console.log('📋 持仓明细:');
-  console.log('─────────────────────────────────────────────────────');
-  console.log('  币种    数量        均价       现价      价值        24h涨跌   盈亏');
-  console.log('─────────────────────────────────────────────────────');
-  
-  holdings.forEach(h => {
-    const emoji = h.pnl >= 0 ? '📈' : '📉';
-    const pnlStr = `${emoji} ${h.pnl >= 0 ? '+' : ''}${h.pnlPercent.toFixed(2)}%`;
-    const changeEmoji = h.change24h >= 0 ? '🟢' : '🔴';
-    const demoStr = h.demo ? ' [demo]' : '';
-    console.log(
-      `  ${h.symbol.padEnd(6)} ${h.quantity.toString().padEnd(10)} $${h.avgCost.toFixed(2).padEnd(9)} $${h.currentPrice.toFixed(2).padEnd(9)} $${h.currentValue.toFixed(0).padEnd(9)} ${changeEmoji}${h.change24h >= 0 ? '+' : ''}${h.change24h.toFixed(2)}% ${pnlStr}${demoStr}`
+    const data = await fetchWithTimeout(
+      `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`
     );
-  });
-
-  console.log('─────────────────────────────────────────────────────\n');
-
-  // 组合统计
-  console.log('📈 组合统计:');
-  console.log('─────────────────────────────────────────────────────');
-  console.log(`  💰 总价值: $${stats.totalValue.toFixed(2)}`);
-  console.log(`  💵 总成本: $${stats.totalCost.toFixed(2)}`);
-  const pnlEmoji = stats.totalPnl >= 0 ? '📈' : '📉';
-  console.log(`  ${pnlEmoji} 总盈亏: $${stats.totalPnl >= 0 ? '+' : ''}${stats.totalPnl.toFixed(2)} (${stats.totalPnlPercent >= 0 ? '+' : ''}${stats.totalPnlPercent.toFixed(2)}%)`);
-  console.log('');
-
-  // 分布
-  console.log('📊 资产分布:');
-  stats.distribution.forEach(d => {
-    const bar = '█'.repeat(Math.ceil(d.percent / 5));
-    console.log(`  ${d.symbol.padEnd(6)} ${bar.padEnd(20)} ${d.percent.toFixed(1)}%`);
-  });
-  console.log('');
-
-  // 风险
-  console.log('⚠️  风险指标:');
-  console.log('─────────────────────────────────────────────────────');
-  console.log(`  波动率: ${stats.volatility}`);
-  console.log(`  24h平均涨跌幅: ${stats.avgChange24h.toFixed(2)}%`);
-  console.log(`  持仓币种数: ${holdings.length}`);
-  console.log('');
-
-  // 建议
-  console.log('💡 投资建议:');
-  console.log('─────────────────────────────────────────────────────');
-  if (stats.totalPnlPercent > 20) {
-    console.log('  ✅ 组合表现优秀，可考虑部分止盈');
-  } else if (stats.totalPnlPercent > 0) {
-    console.log('  ✅ 组合盈利中，继续持有');
-  } else if (stats.totalPnlPercent > -15) {
-    console.log('  ⚠️ 组合小幅亏损，可考虑分批加仓');
-  } else {
-    console.log('  🔴 组合亏损较大，注意风险，可考虑定投摊低成本');
+    const json = JSON.parse(data);
+    // Validate API response
+    if (!json || !json.price || isNaN(parseFloat(json.price))) {
+      throw new Error('Invalid API response');
+    }
+    return json.price;
+  } catch (e) {
+    return null;
   }
-  console.log('═══════════════════════════════════════════════════════\n');
 }
 
 async function main() {
-  console.log('🔄 正在获取投资组合数据...\n');
-
-  const symbols = Object.keys(portfolio);
-  const holdings = await Promise.all(
-    symbols.map(symbol => calculateHolding(symbol, portfolio[symbol]))
-  );
-
-  const stats = calculatePortfolioStats(holdings);
-  printPortfolioReport(holdings, stats);
+  console.log('═══════════════════════════════════════════════════');
+  console.log('   💼 AlphaMind Lite - 投资组合分析');
+  console.log('═══════════════════════════════════════════════════\n');
+  
+  // Empty portfolio check
+  if (!PORTFOLIO || PORTFOLIO.length === 0) {
+    console.log('❌ 持仓为空，请先配置');
+    return;
+  }
+  
+  let totalValue = 0;
+  let totalCost = 0;
+  const holdings = [];
+  
+  for (const p of PORTFOLIO) {
+    const price = await getPrice(p.symbol);
+    if (!price) continue;
+    
+    const value = p.amount * parseFloat(price);
+    const cost = p.amount * p.avgPrice;
+    const pnl = value - cost;
+    const pnlPercent = ((value - cost) / cost * 100);
+    
+    holdings.push({ ...p, price, value, cost, pnl, pnlPercent });
+    totalValue += value;
+    totalCost += cost;
+  }
+  
+  // Empty result check
+  if (holdings.length === 0) {
+    console.log('❌ 无法获取价格数据');
+    return;
+  }
+  
+  holdings.sort((a, b) => b.value - a.value);
+  
+  console.log('📊 持仓明细:\n');
+  console.log('  币种    数量      均价      当前价    价值       盈亏       盈亏%');
+  console.log('  '.repeat(60));
+  
+  for (const h of holdings) {
+    const emoji = h.pnl >= 0 ? '🟢' : '🔴';
+    console.log(
+      `  ${h.symbol.padEnd(6)} ${h.amount.toFixed(2).padStart(8)} $${h.avgPrice}`.padEnd(30) +
+      `$${parseFloat(h.price).toFixed(2).padStart(10)} $${h.value.toFixed(0).padStart(10)} `.padEnd(45) +
+      `${emoji} $${h.pnl.toFixed(0).padStart(8)} (${h.pnlPercent.toFixed(2)}%)`
+    );
+  }
+  
+  // Total cost check
+  if (totalCost === 0) {
+    console.log('\n❌ 总成本为0');
+    return;
+  }
+  
+  const totalPnl = totalValue - totalCost;
+  const totalPnlPercent = ((totalValue - totalCost) / totalCost * 100);
+  const totalEmoji = totalPnl >= 0 ? '🟢' : '🔴';
+  
+  console.log('\n' + '─'.repeat(65));
+  console.log(`  总价值: $${totalValue.toLocaleString()}`);
+  console.log(`  总成本: $${totalCost.toLocaleString()}`);
+  console.log(`  ${totalEmoji} 总盈亏: $${totalPnl.toLocaleString()} (${totalPnlPercent.toFixed(2)}%)`);
+  
+  const btcRatio = holdings.find(h => h.symbol === 'BTC')?.value / totalValue * 100 || 0;
+  console.log('\n📈 风险分析:');
+  console.log(`  • BTC 占比: ${btcRatio.toFixed(1)}%`);
+  console.log(`  • 持仓分散度: ${btcRatio > 50 ? '⚠️ 集中' : '✅ 分散'}`);
+  
+  console.log('\n💡 AI 建议:');
+  if (btcRatio > 70) {
+    console.log('  建议适当分散持仓，降低 BTC 集中风险');
+  } else if (totalPnlPercent < -10) {
+    console.log('  当前亏损较大，建议设置止损线');
+  } else {
+    console.log('  组合健康，继续持有观望');
+  }
+  
+  console.log('\n═══════════════════════════════════════════════════');
 }
 
-main().catch(console.error);
+main();
