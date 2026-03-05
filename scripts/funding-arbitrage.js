@@ -219,11 +219,9 @@ async function main() {
       : '-';
     
     console.log(
-      `│ ${data.symbol.padEnd(10)} │`.padEnd(18) +
-      ` ${rateDisplay.padEnd(10)} │`.padEnd(30) +
-      ` $${parseFloat(data.markPrice).toLocaleString().padEnd(10)} │`.padEnd(44 ${apyDisplay.pad) +
-      `End(10)} │`.padEnd(57) +
-      ` ${riskLevel} │`
+      `│ ${data.symbol.padEnd(10)} │ ${rateDisplay.padEnd(10)} │ ` +
+      `$${parseFloat(data.markPrice).toLocaleString().padEnd(10)} │ ` +
+      `${apyDisplay.padEnd(10)} │ ${riskLevel} │`
     );
     
     // 记录高收益机会
