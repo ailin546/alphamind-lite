@@ -3,20 +3,31 @@
 /**
  * Binance News Search via Tavily
  * 搜索 Binance 最新公告新闻，返回中文结果
+ * 
+ * 使用方法:
+ *   node tavily-news.js [结果数量]
+ * 
+ * 环境变量:
+ *   TAVILY_API_KEY - 从 https://tavily.com 获取 API 密钥
  */
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 const API_URL = "https://api.tavily.com/search";
 
-if (!TAVILY_API_KEY) {
-  console.error("❌ 缺少 TAVILY_API_KEY 环境变量");
-  process.exit(1);
-}
-
-const args = process.argv.slice(2);
-const count = args[0] ? parseInt(args[0], 10) : 5; // 默认5条
-
 async function searchBinanceNews(maxResults = 5) {
+  if (!TAVILY_API_KEY) {
+    console.log("❌ 请先配置 TAVILY_API_KEY");
+    console.log("");
+    console.log("获取 API Key:");
+    console.log("1. 访问 https://tavily.com 注册账号");
+    console.log("2. 获取 API Key");
+    console.log("3. 运行: export TAVILY_API_KEY=你的key");
+    console.log("");
+    console.log("或者在 ~/.openclaw/workspace/.env 中添加:");
+    console.log("TAVILY_API_KEY=你的key");
+    return [];
+  }
+
   const body = {
     api_key: TAVILY_API_KEY,
     query: "Binance announcement news",
@@ -25,7 +36,7 @@ async function searchBinanceNews(maxResults = 5) {
     max_results: Math.max(1, Math.min(maxResults, 20)),
     include_answer: true,
     include_raw_content: false,
-    days: 3, // 最近3天
+    days: 3,
   };
 
   console.log(`🔍 正在搜索 Binance 最新公告...\n`);
@@ -43,7 +54,7 @@ async function searchBinanceNews(maxResults = 5) {
 
   const data = await resp.json();
   
-  // 打印 AI 生成的摘要（英文，我们翻译成中文）
+  // 打印 AI 生成的摘要
   if (data.answer) {
     console.log("📰 Binance 动态摘要:");
     console.log("---");
@@ -73,9 +84,16 @@ async function searchBinanceNews(maxResults = 5) {
   return results;
 }
 
-// 运行
+// 主入口
+const args = process.argv.slice(2);
+const count = args[0] ? parseInt(args[0], 10) : 5;
+
 searchBinanceNews(count)
-  .then(() => console.log("✅ 搜索完成"))
+  .then((results) => {
+    if (results.length > 0) {
+      console.log("✅ 搜索完成");
+    }
+  })
   .catch((err) => {
     console.error("❌ 搜索失败:", err.message);
     process.exit(1);
