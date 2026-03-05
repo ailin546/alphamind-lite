@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaMind Lite | AI Trading Partner</title>
+    <style>
+    :root {
+        --bg: #0a0a0f;
+        --bg-alt: #12121a;
+        --primary: #00ff88;
+        --secondary: #00ccff;
+        --accent: #ff00aa;
+        --text: #e0e0e0;
+        --text-dim: #888;
+        --border: #1a1a2e;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        overflow-x: hidden;
+    }
+    
+    /* Matrix rain effect */
+    .matrix {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        opacity: 0.03;
+        z-index: 0;
+    }
+    
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Header */
+    header {
+        text-align: center;
+        padding: 60px 0;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .logo {
+        font-size: 3em;
+        font-weight: bold;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: glow 2s ease-in-out infinite alternate;
+    }
+    
+    @keyframes glow {
+        from { filter: drop-shadow(0 0 10px var(--primary)); }
+        to { filter: drop-shadow(0 0 20px var(--secondary)); }
+    }
+    
+    .tagline {
+        color: var(--text-dim);
+        margin-top: 10px;
+        font-size: 1.1em;
+    }
+    
+    .lang-switch {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 8px 16px;
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        color: var(--primary);
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.3s;
+    }
+    
+    .lang-switch:hover {
+        background: var(--primary);
+        color: var(--bg);
+    }
+    
+    /* Navigation */
+    nav {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        padding: 30px 0;
+        flex-wrap: wrap;
+    }
+    
+    nav a {
+        padding: 10px 20px;
+        color: var(--text-dim);
+        text-decoration: none;
+        border: 1px solid var(--border);
+        transition: all 0.3s;
+    }
+    
+    nav a:hover {
+        color: var(--primary);
+        border-color: var(--primary);
+        box-shadow: 0 0 15px var(--primary);
+    }
+    
+    /* Sections */
+    section {
+        padding: 60px 0;
+    }
+    
+    h2 {
+        font-size: 2em;
+        margin-bottom: 30px;
+        color: var(--primary);
+        border-left: 3px solid var(--accent);
+        padding-left: 15px;
+    }
+    
+    /* Features Grid */
+    .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+    }
+    
+    .feature-card {
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+        padding: 25px;
+        transition: all 0.3s;
+        cursor: pointer;
+    }
+    
+    .feature-card:hover {
+        border-color: var(--primary);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,255,136,0.1);
+    }
+    
+    .feature-card .icon {
+        font-size: 2em;
+        margin-bottom: 15px;
+    }
+    
+    .feature-card h3 {
+        color: var(--secondary);
+        margin-bottom: 10px;
+    }
+    
+    .feature-card p {
+        color: var(--text-dim);
+        font-size: 0.9em;
+    }
+    
+    /* Terminal */
+    .terminal {
+        background: #0d0d15;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .terminal-header {
+        background: var(--bg-alt);
+        padding: 10px 15px;
+        display: flex;
+        gap: 8px;
+    }
+    
+    .terminal-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+    
+    .dot-red { background: #ff5f56; }
+    .dot-yellow { background: #ffbd2e; }
+    .dot-green { background: #27ca40; }
+    
+    .terminal-body {
+        padding: 20px;
+        font-family: 'SF Mono', monospace;
+    }
+    
+    .cmd { color: var(--secondary); }
+    .output { color: var(--primary); }
+    .error { color: var(--accent); }
+    
+    /* Stats */
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        text-align: center;
+    }
+    
+    .stat {
+        padding: 30px;
+        background: var(--bg-alt);
+        border: 1px solid var(--border);
+    }
+    
+    .stat-number {
+        font-size: 2.5em;
+        color: var(--primary);
+        font-weight: bold;
+    }
+    
+    .stat-label {
+        color: var(--text-dim);
+        margin-top: 10px;
+    }
+    
+    /* Footer */
+    footer {
+        text-align: center;
+        padding: 40px;
+        border-top: 1px solid var(--border);
+        color: var(--text-dim);
+    }
+    
+    footer a {
+        color: var(--primary);
+        text-decoration: none;
+    }
+    
+    /* Animations */
+    @keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
+    }
+    
+    .cursor {
+        display: inline-block;
+        width: 10px;
+        height: 1.2em;
+        background: var(--primary);
+        animation: blink 1s infinite;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .stats { grid-template-columns: repeat(2, 1fr); }
+        .logo { font-size: 2em; }
+    }
+    </style>
+</head>
+<body>
+    <canvas class="matrix" id="matrix"></canvas>
+    
+    <button class="lang-switch" onclick="toggleLang()">EN / 中文</button>
+    
+    <div class="container">
+        <header>
+            <div class="logo">AlphaMind Lite 🦞</div>
+            <div class="tagline">7×24 小时币安智能交易伙伴 | 7×24h AI Trading Partner</div>
+        </header>
+        
+        <nav>
+            <a href="#features">功能 Features</a>
+            <a href="#demo">演示 Demo</a>
+            <a href="#stats">统计 Stats</a>
+            <a href="#docs">文档 Docs</a>
+            <a href="#contact">联系 Contact</a>
+        </nav>
+        
+        <section id="features">
+            <h2>✨ 核心功能 | Core Features</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <div class="icon">📊</div>
+                    <h3>实时行情 | Market Data</h3>
+                    <p>毫秒级获取 Binance 主流币种实时价格 | Millisecond-level Binance price fetching</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🎯</div>
+                    <h3>恐慌指数 | Fear Index</h3>
+                    <p>Fear & Greed Index + AI 分析 | AI-powered sentiment analysis</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">💼</div>
+                    <h3>持仓分析 | Portfolio</h3>
+                    <p>多币种盈亏智能计算 | Multi-coin P&L calculation</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">📡</div>
+                    <h3>情报监控 | Intelligence</h3>
+                    <p>7×24 小时监控公告新闻 | 24/7 announcement monitoring</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🛡️</div>
+                    <h3>风控预警 | Risk Alerts</h3>
+                    <p>实时仓位健康检测 | Real-time position health</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔔</div>
+                    <h3>价格提醒 | Price Alerts</h3>
+                    <p>自定义阈值推送 | Custom threshold notifications</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">📈</div>
+                    <h3>市场情绪 | Sentiment</h3>
+                    <p>综合市场情绪分析 | Comprehensive sentiment analysis</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🤖</div>
+                    <h3>AI 对话 | AI Chat</h3>
+                    <p>自然语言交互 | Natural language interaction</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔍</div>
+                    <h3>套利扫描 | Arbitrage</h3>
+                    <p>波动机会发现 | Opportunity discovery</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">💰</div>
+                    <h3>定投计算 | DCA</h3>
+                    <p>美元成本平均法计算 | Dollar cost averaging</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🐋</div>
+                    <h3>巨鲸监控 | Whale Alert</h3>
+                    <p>大户活动追踪 | Large holder tracking</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🎮</div>
+                    <h3>交互菜单 | Interactive</h3>
+                    <p>可视化功能选择 | Visual feature selection</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="demo">
+            <h2>🚀 演示 | Demo</h2>
+            <div class="terminal">
+                <div class="terminal-header">
+                    <span class="terminal-dot dot-red"></span>
+                    <span class="terminal-dot dot-yellow"></span>
+                    <span class="terminal-dot dot-green"></span>
+                </div>
+                <div class="terminal-body">
+                    <div><span class="cmd">$</span> <span class="output">git clone https://github.com/ailin546/alphamind-lite.git</span></div>
+                    <div><span class="cmd">$</span> <span class="output">cd alphamind-lite</span></div>
+                    <div><span class="cmd">$</span> <span class="output">node scripts/demo.js</span></div>
+                    <div>&nbsp;</div>
+                    <div><span class="output">╔═══════════════════════════════════════╗</span></div>
+                    <div><span class="output">║  🤖 AlphaMind Lite v7.0         ║</span></div>
+                    <div><span class="output">╚═══════════════════════════════════════╝</span></div>
+                    <div><span class="output">📊 BTC: $71,652 (+2.51%)</span> <span class="cursor"></span></div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="stats">
+            <h2>📊 项目统计 | Stats</h2>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">18</div>
+                    <div class="stat-label">脚本 Scripts</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">18</div>
+                    <div class="stat-label">文档 Docs</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">6</div>
+                    <div class="stat-label">代理 Agents</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">语言 Languages</div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="docs">
+            <h2>📚 文档 | Documentation</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>📖 产品规格</h3>
+                    <p>product-spec.md</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📊 商业计划</h3>
+                    <p>business-plan.md</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🗺️ 产品路线图</h3>
+                    <p>roadmap.md</p>
+                </div>
+                <div class="feature-card">
+                    <h3>❓ 常见问题</h3>
+                    <p>faq.md</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="contact">
+            <h2>🔗 联系 | Contact</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>🐙 GitHub</h3>
+                    <p><a href="https://github.com/ailin546/alphamind-lite">github.com/ailin546</a></p>
+                </div>
+                <div class="feature-card">
+                    <h3>📦 安装</h3>
+                    <p>npm install 或直接运行</p>
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p>AlphaMind Lite © 2026 | MIT License</p>
+            <p>让 AI 成为你的交易伙伴 | Let AI be your trading partner 💪</p>
+        </footer>
+    </div>
+    
+    <script>
+    // Matrix rain effect
+    const canvas = document.getElementById('matrix');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+    const fontSize = 14;
+    const columns = canvas.width / fontSize;
+    const drops = [];
+    
+    for (let i = 0; i < columns; i++) drops[i] = 1;
+    
+    function draw() {
+        ctx.fillStyle = 'rgba(10, 10, 15, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#00ff88';
+        ctx.font = fontSize + 'px monospace';
+        
+        for (let i = 0; i < drops.length; i++) {
+            const char = chars[Math.floor(Math.random() * chars.length)];
+            ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+            if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                drops[i] = 0;
+            }
+            drops[i]++;
+        }
+    }
+    
+    setInterval(draw, 50);
+    
+    // Language toggle
+    let isZh = true;
+    function toggleLang() {
+        isZh = !isZh;
+        // Simplified toggle - in real implementation would swap all text
+    }
+    </script>
+</body>
+</html>
