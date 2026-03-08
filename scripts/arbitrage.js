@@ -5,44 +5,9 @@
  * 使用 Binance 现货 + 期货 API
  */
 
-const { httpGet } = require('./api-client');
+const { fetchMarketData, fetchFundingRates } = require('./api-client');
 
 const SYMBOLS = ['BTC', 'ETH', 'BNB', 'SOL', 'DOGE', 'XRP', 'ADA', 'AVAX', 'LINK', 'DOT'];
-
-/**
- * 获取现货价格
- */
-async function fetchSpotPrice(symbol) {
-  const data = await httpGet(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`, { timeout: 5000 });
-  return parseFloat(data.price);
-}
-
-/**
- * 获取合约标记价格和资金费率
- */
-async function fetchFuturesData(symbol) {
-  const data = await httpGet(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}USDT`, { timeout: 5000 });
-  return {
-    markPrice: parseFloat(data.markPrice),
-    indexPrice: parseFloat(data.indexPrice),
-    fundingRate: parseFloat(data.lastFundingRate),
-    nextFunding: data.nextFundingTime,
-  };
-}
-
-/**
- * 获取24h行情数据
- */
-async function fetchSpot24h(symbol) {
-  const data = await httpGet(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}USDT`, { timeout: 5000 });
-  return {
-    price: parseFloat(data.lastPrice),
-    high: parseFloat(data.highPrice),
-    low: parseFloat(data.lowPrice),
-    volume: parseFloat(data.quoteVolume),
-    change: parseFloat(data.priceChangePercent),
-  };
-}
 
 async function main() {
   console.log('═══════════════════════════════════════════════════════════');
@@ -51,38 +16,41 @@ async function main() {
 
   console.log('📡 扫描现货-合约价差...\n');
 
-  const results = [];
-
-  for (const sym of SYMBOLS) {
+  // Fetch all symbols in parallel (2 calls per symbol instead of 3)
+  const results = (await Promise.all(SYMBOLS.map(async (sym) => {
     try {
-      const [spot, futures, market] = await Promise.all([
-        fetchSpotPrice(sym).catch(() => null),
-        fetchFuturesData(sym).catch(() => null),
-        fetchSpot24h(sym).catch(() => null),
+      const pair = `${sym}USDT`;
+      const [market, futures] = await Promise.all([
+        fetchMarketData(pair).catch(() => null),
+        fetchFundingRates(pair).catch(() => null),
       ]);
 
-      if (!spot || !futures) continue;
+      if (!market || !futures) return null;
 
-      // Basis = (Futures - Spot) / Spot * 100
-      const basis = ((futures.markPrice - spot) / spot) * 100;
-      const fundingAPY = futures.fundingRate * 3 * 365 * 100; // 3 times/day * 365 days
-      const dayRange = market ? ((market.high - market.low) / market.low * 100) : 0;
+      const spotPrice = parseFloat(market.lastPrice);
+      const markPrice = parseFloat(futures.markPrice);
+      const fundingRate = parseFloat(futures.lastFundingRate);
+      const basis = ((markPrice - spotPrice) / spotPrice) * 100;
+      const fundingAPY = fundingRate * 3 * 365 * 100;
+      const high = parseFloat(market.highPrice);
+      const low = parseFloat(market.lowPrice);
+      const dayRange = low > 0 ? ((high - low) / low * 100) : 0;
 
-      results.push({
+      return {
         symbol: sym,
-        spotPrice: spot,
-        futuresPrice: futures.markPrice,
+        spotPrice,
+        futuresPrice: markPrice,
         basis,
-        fundingRate: futures.fundingRate * 100,
+        fundingRate: fundingRate * 100,
         fundingAPY,
         dayRange,
-        volume: market?.volume || 0,
-        change: market?.change || 0,
-      });
+        volume: parseFloat(market.quoteVolume) || 0,
+        change: parseFloat(market.priceChangePercent) || 0,
+      };
     } catch {
-      // Skip failed symbols
+      return null;
     }
-  }
+  }))).filter(Boolean);
 
   if (results.length === 0) {
     console.log('  ❌ 无法获取数据\n');

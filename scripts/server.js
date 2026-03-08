@@ -15,6 +15,9 @@ const db = require('./db');
 createLogger({ context: 'server' });
 const log = getLogger('server');
 
+const PKG_VERSION = require('../package.json').version;
+const STATIC_ROOT = path.resolve(__dirname, '..');
+
 let config;
 try {
   config = require('../config/config');
@@ -92,7 +95,7 @@ async function handleHealth(req, res) {
 
   const health = {
     status: 'ok',
-    version: require('../package.json').version,
+    version: PKG_VERSION,
     uptime,
     timestamp: new Date().toISOString(),
     memory: {
@@ -110,12 +113,22 @@ async function handleHealth(req, res) {
   sendJSON(res, 200, health);
 }
 
+// Cached readiness result (TTL 30s to avoid hitting Binance on every k8s probe)
+let _readyCache = { ready: false, checkedAt: 0 };
+const READY_TTL = 30000;
+
 async function handleReadiness(req, res) {
-  // Check if APIs are reachable
+  const now = Date.now();
+  if (now - _readyCache.checkedAt < READY_TTL) {
+    sendJSON(res, _readyCache.ready ? 200 : 503, { status: _readyCache.ready ? 'ready' : 'not ready' });
+    return;
+  }
   try {
     await fetchMarketData('BTCUSDT');
+    _readyCache = { ready: true, checkedAt: now };
     sendJSON(res, 200, { status: 'ready' });
   } catch {
+    _readyCache = { ready: false, checkedAt: now };
     sendJSON(res, 503, { status: 'not ready', reason: 'API unreachable' });
   }
 }
@@ -179,8 +192,16 @@ async function handleMetrics(req, res) {
 }
 
 function serveStatic(req, res) {
-  const safePath = path.normalize(req.url).replace(/^(\.\.[\/\\])+/, '');
-  let filePath = path.join(__dirname, '..', safePath === '/' ? 'index.html' : safePath);
+  const urlPath = req.url.split('?')[0];
+  const filePath = urlPath === '/'
+    ? path.join(STATIC_ROOT, 'index.html')
+    : path.resolve(STATIC_ROOT, '.' + path.normalize(urlPath));
+
+  // Prevent path traversal: resolved path must be within STATIC_ROOT
+  if (!filePath.startsWith(STATIC_ROOT + path.sep) && filePath !== path.join(STATIC_ROOT, 'index.html')) {
+    sendJSON(res, 403, { error: 'Forbidden' });
+    return;
+  }
 
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
@@ -282,9 +303,12 @@ function handleSSE(req, res) {
   req.on('close', () => { sseClients.delete(res); });
 }
 
-// Broadcast prices every 15s to SSE clients
+// Broadcast prices every 15s to SSE clients (with overlap guard)
+let _sseBroadcasting = false;
+
 setInterval(async () => {
-  if (sseClients.size === 0) return;
+  if (sseClients.size === 0 || _sseBroadcasting) return;
+  _sseBroadcasting = true;
   try {
     const symbols = ['BTC', 'ETH', 'BNB', 'SOL'];
     const results = await Promise.all(
@@ -299,7 +323,9 @@ setInterval(async () => {
     for (const client of sseClients) {
       try { client.write(msg); } catch { sseClients.delete(client); }
     }
-  } catch {}
+  } catch {} finally {
+    _sseBroadcasting = false;
+  }
 }, 15000);
 
 // ---- Router ----

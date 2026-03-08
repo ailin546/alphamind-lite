@@ -25,25 +25,32 @@ const DEFAULT_DATA = {
 };
 
 let _cache = null;
+let _dirEnsured = false;
 
 function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) {
+  if (_dirEnsured) return;
+  try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err;
   }
+  _dirEnsured = true;
 }
 
 function load() {
   if (_cache) return _cache;
   ensureDir();
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      _cache = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-      return _cache;
-    } catch {
+  try {
+    _cache = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    return _cache;
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
       // Corrupted file, backup and reset
-      const backup = DB_FILE + '.bak.' + Date.now();
-      fs.copyFileSync(DB_FILE, backup);
-      console.error(`[db] Corrupted data file, backed up to ${backup}`);
+      try {
+        const backup = DB_FILE + '.bak.' + Date.now();
+        fs.copyFileSync(DB_FILE, backup);
+        console.error(`[db] Corrupted data file, backed up to ${backup}`);
+      } catch {}
     }
   }
   _cache = { ...DEFAULT_DATA, _meta: { ...DEFAULT_DATA._meta, created: new Date().toISOString() } };
@@ -52,25 +59,23 @@ function load() {
 }
 
 function save() {
+  if (!_cache) return;
   ensureDir();
-  if (_cache) {
-    _cache._meta.updated = new Date().toISOString();
-    const tmp = DB_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(_cache, null, 2), 'utf8');
-    fs.renameSync(tmp, DB_FILE); // atomic write
-  }
+  _cache._meta.updated = new Date().toISOString();
+  const tmp = DB_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(_cache, null, 2), 'utf8');
+  fs.renameSync(tmp, DB_FILE); // atomic write
 }
 
 // ---- Portfolio ----
 function getPortfolio() {
-  return load().portfolio;
+  return load().portfolio.map(p => ({ ...p })); // return copies
 }
 
 function addHolding(symbol, amount, avgPrice) {
   const db = load();
   const existing = db.portfolio.find(p => p.symbol === symbol.toUpperCase());
   if (existing) {
-    // Average in: new_avg = (old_total + new_total) / (old_amount + new_amount)
     const totalCost = existing.amount * existing.avgPrice + amount * avgPrice;
     existing.amount += amount;
     existing.avgPrice = totalCost / existing.amount;
@@ -98,18 +103,17 @@ function removeHolding(symbol) {
 function updateHolding(symbol, amount, avgPrice) {
   const db = load();
   const holding = db.portfolio.find(p => p.symbol === symbol.toUpperCase());
-  if (holding) {
-    if (amount !== undefined) holding.amount = amount;
-    if (avgPrice !== undefined) holding.avgPrice = avgPrice;
-    holding.updatedAt = new Date().toISOString();
-    save();
-  }
+  if (!holding) return null;
+  if (amount !== undefined) holding.amount = amount;
+  if (avgPrice !== undefined) holding.avgPrice = avgPrice;
+  holding.updatedAt = new Date().toISOString();
+  save();
   return holding;
 }
 
 // ---- Alerts ----
 function getAlerts() {
-  return load().alerts;
+  return load().alerts.map(a => ({ ...a })); // return copies
 }
 
 function addAlert(symbol, price, direction) {
@@ -119,7 +123,7 @@ function addAlert(symbol, price, direction) {
     id,
     symbol: symbol.toUpperCase(),
     price,
-    direction, // 'above' or 'below'
+    direction,
     triggered: false,
     createdAt: new Date().toISOString(),
   };
@@ -146,7 +150,7 @@ function triggerAlert(id) {
 
 // ---- Watchlist ----
 function getWatchlist() {
-  return load().watchlist;
+  return [...load().watchlist]; // return copy
 }
 
 function setWatchlist(symbols) {
@@ -157,7 +161,7 @@ function setWatchlist(symbols) {
 
 // ---- DCA Plans ----
 function getDCAPlans() {
-  return load().dcaPlans;
+  return load().dcaPlans.map(p => ({ ...p }));
 }
 
 function addDCAPlan(symbol, monthlyAmount, months) {
@@ -175,7 +179,7 @@ function addDCAPlan(symbol, monthlyAmount, months) {
 }
 
 // ---- Price History ----
-function recordPrice(symbol, price) {
+function recordPrice(symbol, price, autoSave = true) {
   const db = load();
   if (!db.priceHistory[symbol]) {
     db.priceHistory[symbol] = [];
@@ -185,7 +189,7 @@ function recordPrice(symbol, price) {
   if (db.priceHistory[symbol].length > 1000) {
     db.priceHistory[symbol] = db.priceHistory[symbol].slice(-1000);
   }
-  save();
+  if (autoSave) save();
 }
 
 function getPriceHistory(symbol, limit = 100) {
@@ -196,7 +200,8 @@ function getPriceHistory(symbol, limit = 100) {
 
 // ---- Settings ----
 function getSettings() {
-  return load().settings;
+  const s = load().settings;
+  return { ...s, telegram: { ...s.telegram } }; // deep-ish copy
 }
 
 function updateSettings(newSettings) {

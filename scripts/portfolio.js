@@ -39,7 +39,7 @@ async function showPortfolio() {
   console.log('  🔄 获取实时价格...\n');
   const prices = await fetchMultiplePrices(symbols);
   const priceMap = {};
-  prices.forEach(p => { priceMap[p.symbol] = p.price; });
+  prices.forEach(p => { if (p.price) priceMap[p.symbol] = p.price; });
 
   let totalValue = 0;
   let totalCost = 0;
@@ -56,8 +56,11 @@ async function showPortfolio() {
     totalValue += value;
     totalCost += cost;
     holdings.push({ ...p, price, value, cost, pnl, pnlPercent });
-    db.recordPrice(p.symbol, price);
   }
+
+  // Batch record prices (single save instead of N saves)
+  for (const h of holdings) db.recordPrice(h.symbol, h.price, false);
+  db.save();
 
   if (holdings.length === 0) { console.log('  ❌ 无法获取任何价格数据\n'); return; }
   holdings.sort((a, b) => b.value - a.value);
@@ -158,7 +161,12 @@ async function main() {
     db.removeHolding(args[1].toUpperCase());
     console.log(`✅ 已删除 ${args[1].toUpperCase()}`);
   } else if (cmd === 'update' && args.length >= 3) {
-    db.updateHolding(args[1].toUpperCase(), parseFloat(args[2]), args[3] ? parseFloat(args[3]) : undefined);
+    const amount = parseFloat(args[2]);
+    const avgPrice = args[3] ? parseFloat(args[3]) : undefined;
+    if (isNaN(amount) || amount <= 0) { console.log('❌ 无效数量'); return; }
+    if (avgPrice !== undefined && (isNaN(avgPrice) || avgPrice <= 0)) { console.log('❌ 无效价格'); return; }
+    const result = db.updateHolding(args[1].toUpperCase(), amount, avgPrice);
+    if (!result) { console.log(`❌ 未找到 ${args[1].toUpperCase()} 持仓`); return; }
     console.log(`✅ 已更新 ${args[1].toUpperCase()}`);
   } else if (cmd === 'interactive' || cmd === 'i') {
     await interactiveMode();

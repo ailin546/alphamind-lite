@@ -124,24 +124,35 @@ const SYMBOLS = ['BTC','ETH','BNB','SOL','XRP','ADA','DOGE','AVAX'];
 function fmt(n,d=2){return Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d})}
 async function api(path){const r=await fetch(API+path);if(!r.ok)throw new Error('API '+r.status);return r.json()}
 
-async function loadPrices(){
-    const c=document.getElementById('price-cards');
-    try{
-        const res=await Promise.all(['BTC','ETH','BNB','SOL'].map(s=>api('/api/market?symbol='+s+'USDT').catch(()=>null)));
-        c.innerHTML='';
-        for(const d of res){if(!d)continue;const s=d.symbol.replace('USDT',''),p=parseFloat(d.lastPrice),ch=parseFloat(d.priceChangePercent),dir=ch>=0?'up':'down',sign=ch>=0?'+':'';
-        c.innerHTML+=`<div class="card price-card"><div class="symbol">${s}</div><div class="price ${dir}">$${fmt(p)}</div><span class="change ${dir}">${sign}${ch.toFixed(2)}%</span></div>`}
-    }catch{c.innerHTML='<div class="card">Failed to load</div>'}
+let _marketCache=null;
+async function fetchAllMarkets(){
+    _marketCache=await Promise.all(SYMBOLS.map(s=>api('/api/market?symbol='+s+'USDT').catch(()=>null)));
+    return _marketCache;
 }
 
-async function loadMarketTable(){
+function renderPriceCards(data){
+    const c=document.getElementById('price-cards');
+    const top=['BTC','ETH','BNB','SOL'];
+    const cards=data.filter(d=>d&&top.includes(d.symbol.replace('USDT','')));
+    if(cards.length===0){c.innerHTML='<div class="card">Failed to load</div>';return}
+    const parts=[];
+    for(const d of cards){const s=d.symbol.replace('USDT',''),p=parseFloat(d.lastPrice),ch=parseFloat(d.priceChangePercent),dir=ch>=0?'up':'down',sign=ch>=0?'+':'';
+    parts.push(`<div class="card price-card"><div class="symbol">${s}</div><div class="price ${dir}">$${fmt(p)}</div><span class="change ${dir}">${sign}${ch.toFixed(2)}%</span></div>`)}
+    c.innerHTML=parts.join('');
+}
+
+function renderMarketTable(data){
     const tb=document.getElementById('market-table');
-    try{
-        const res=await Promise.all(SYMBOLS.map(s=>api('/api/market?symbol='+s+'USDT').catch(()=>null)));
-        tb.innerHTML='';
-        for(const d of res){if(!d)continue;const s=d.symbol.replace('USDT',''),p=parseFloat(d.lastPrice),ch=parseFloat(d.priceChangePercent),hi=parseFloat(d.highPrice),lo=parseFloat(d.lowPrice),v=parseFloat(d.quoteVolume),dir=ch>=0?'up':'down',sign=ch>=0?'+':'';
-        tb.innerHTML+=`<tr><td><strong>${s}</strong></td><td>$${fmt(p)}</td><td class="${dir}">${sign}${ch.toFixed(2)}%</td><td>$${fmt(hi)}</td><td>$${fmt(lo)}</td><td>$${(v/1e6).toFixed(1)}M</td></tr>`}
-    }catch{tb.innerHTML='<tr><td colspan="6">Failed</td></tr>'}
+    const rows=[];
+    for(const d of data){if(!d)continue;const s=d.symbol.replace('USDT',''),p=parseFloat(d.lastPrice),ch=parseFloat(d.priceChangePercent),hi=parseFloat(d.highPrice),lo=parseFloat(d.lowPrice),v=parseFloat(d.quoteVolume),dir=ch>=0?'up':'down',sign=ch>=0?'+':'';
+    rows.push(`<tr><td><strong>${s}</strong></td><td>$${fmt(p)}</td><td class="${dir}">${sign}${ch.toFixed(2)}%</td><td>$${fmt(hi)}</td><td>$${fmt(lo)}</td><td>$${(v/1e6).toFixed(1)}M</td></tr>`)}
+    tb.innerHTML=rows.length?rows.join(''):'<tr><td colspan="6">Failed</td></tr>';
+}
+
+async function loadMarket(){
+    try{const data=await fetchAllMarkets();renderPriceCards(data);renderMarketTable(data)}catch{
+    document.getElementById('price-cards').innerHTML='<div class="card">Failed to load</div>';
+    document.getElementById('market-table').innerHTML='<tr><td colspan="6">Failed</td></tr>'}
 }
 
 async function loadSentiment(){
@@ -199,10 +210,10 @@ function connectSSE(){
 }
 
 async function init(){
-    await Promise.all([loadPrices(),loadMarketTable(),loadSentiment(),loadPortfolio(),loadAlerts(),loadFunding()]);
+    await Promise.all([loadMarket(),loadSentiment(),loadPortfolio(),loadAlerts(),loadFunding()]);
     document.getElementById('status-text').textContent='Live';
     connectSSE();
-    setInterval(()=>{loadPrices();loadMarketTable();loadPortfolio()},30000);
+    setInterval(()=>{loadMarket();loadPortfolio()},30000);
     setInterval(loadSentiment,300000);
 }
 init();

@@ -82,14 +82,20 @@ async function main() {
   console.log('   🐋 AlphaMind - 巨鲸活动监控 (Real Data)');
   console.log('═══════════════════════════════════════════════════════════\n');
 
+  // Fetch all data in parallel
+  const [market, largeTrades, onchain] = await Promise.all([
+    fetchMarketData('BTCUSDT').catch(() => null),
+    fetchBinanceLargeTrades('BTCUSDT', 500000),
+    fetchBTCLargeTransactions(),
+  ]);
+
   // 1. Market overview
   console.log('📊 当前市场:');
-  try {
-    const market = await fetchMarketData('BTCUSDT');
+  if (market) {
     const emoji = parseFloat(market.priceChangePercent) >= 0 ? '🟢' : '🔴';
     console.log(`  BTC: $${parseFloat(market.lastPrice).toLocaleString()} ${emoji} ${parseFloat(market.priceChangePercent).toFixed(2)}%`);
     console.log(`  24h 成交量: $${(parseFloat(market.quoteVolume) / 1e9).toFixed(2)}B`);
-  } catch {
+  } else {
     console.log('  ⚠️ 无法获取市场数据');
   }
 
@@ -97,7 +103,6 @@ async function main() {
   console.log('\n🔥 Binance 近期大额成交 (>$500K):');
   console.log('  ' + '─'.repeat(55));
 
-  const largeTrades = await fetchBinanceLargeTrades('BTCUSDT', 500000);
   if (largeTrades.length > 0) {
     let buyVol = 0, sellVol = 0;
     for (const t of largeTrades.slice(0, 10)) {
@@ -121,8 +126,6 @@ async function main() {
   // 3. BTC on-chain large transactions
   console.log('\n⛓️  BTC 链上大额转账 (最新区块, ≥100 BTC):');
   console.log('  ' + '─'.repeat(55));
-
-  const onchain = await fetchBTCLargeTransactions();
   if (onchain.error) {
     console.log(`  ⚠️ 链上数据获取失败: ${onchain.error}`);
     console.log('  (Blockchain.com API 可能受区域限制)');

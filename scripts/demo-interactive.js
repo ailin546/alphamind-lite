@@ -49,7 +49,7 @@ function runScript(scriptName, args = []) {
       { encoding: 'utf8', stdio: 'inherit', maxBuffer: 10 * 1024 * 1024 }
     );
   } catch (e) {
-    // execSync with stdio:inherit already printed output
+    if (e.status) console.log(`\n  ⚠️ 脚本退出码: ${e.status}`);
   }
 }
 
