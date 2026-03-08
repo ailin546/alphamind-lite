@@ -259,10 +259,79 @@ async function handlePortfolio(req, res) {
   }
 }
 
+// ---- Body Parser Helper ----
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk;
+      if (body.length > 1e5) { req.destroy(); reject(new Error('Body too large')); }
+    });
+    req.on('end', () => {
+      try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid JSON')); }
+    });
+    req.on('error', reject);
+  });
+}
+
+// ---- Portfolio Mutation API ----
+async function handlePortfolioAdd(req, res) {
+  try {
+    const { symbol, amount, avgPrice } = await readBody(req);
+    if (!symbol || typeof symbol !== 'string') return sendJSON(res, 400, { error: 'symbol required' });
+    const amt = parseFloat(amount);
+    const price = parseFloat(avgPrice);
+    if (isNaN(amt) || amt <= 0) return sendJSON(res, 400, { error: 'Invalid amount' });
+    if (isNaN(price) || price <= 0) return sendJSON(res, 400, { error: 'Invalid avgPrice' });
+    db.addHolding(symbol.toUpperCase(), amt, price);
+    sendJSON(res, 200, { ok: true, message: `Added ${symbol.toUpperCase()}` });
+  } catch (err) {
+    sendJSON(res, 400, { error: err.message });
+  }
+}
+
+async function handlePortfolioRemove(req, res) {
+  try {
+    const { symbol } = await readBody(req);
+    if (!symbol) return sendJSON(res, 400, { error: 'symbol required' });
+    const result = db.removeHolding(symbol.toUpperCase());
+    if (!result) return sendJSON(res, 404, { error: `${symbol.toUpperCase()} not found` });
+    sendJSON(res, 200, { ok: true, message: `Removed ${symbol.toUpperCase()}` });
+  } catch (err) {
+    sendJSON(res, 400, { error: err.message });
+  }
+}
+
 // ---- Alerts API ----
 function handleAlerts(req, res) {
   const alerts = db.getAlerts();
   sendJSON(res, 200, { alerts });
+}
+
+async function handleAlertAdd(req, res) {
+  try {
+    const { symbol, price, direction } = await readBody(req);
+    if (!symbol || typeof symbol !== 'string') return sendJSON(res, 400, { error: 'symbol required' });
+    const p = parseFloat(price);
+    if (isNaN(p) || p <= 0) return sendJSON(res, 400, { error: 'Invalid price' });
+    if (!['above', 'below'].includes(direction)) return sendJSON(res, 400, { error: 'direction must be above or below' });
+    const alert = db.addAlert(symbol.toUpperCase(), p, direction);
+    sendJSON(res, 200, { ok: true, alert });
+  } catch (err) {
+    sendJSON(res, 400, { error: err.message });
+  }
+}
+
+async function handleAlertRemove(req, res) {
+  try {
+    const { id } = await readBody(req);
+    if (!id) return sendJSON(res, 400, { error: 'id required' });
+    const result = db.removeAlert(id);
+    if (!result) return sendJSON(res, 404, { error: 'Alert not found' });
+    sendJSON(res, 200, { ok: true });
+  } catch (err) {
+    sendJSON(res, 400, { error: err.message });
+  }
 }
 
 // ---- Funding Rates API ----
@@ -336,6 +405,10 @@ const routes = {
   'GET /api/sentiment': handleSentiment,
   'GET /api/portfolio': handlePortfolio,
   'GET /api/alerts': handleAlerts,
+  'POST /api/portfolio/add': handlePortfolioAdd,
+  'POST /api/portfolio/remove': handlePortfolioRemove,
+  'POST /api/alerts/add': handleAlertAdd,
+  'POST /api/alerts/remove': handleAlertRemove,
   'GET /api/funding': handleFunding,
   'GET /api/stream': handleSSE,
   'GET /metrics': handleMetrics,
@@ -356,7 +429,7 @@ const server = http.createServer(async (req, res) => {
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {

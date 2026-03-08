@@ -95,7 +95,9 @@ function addHolding(symbol, amount, avgPrice) {
 
 function removeHolding(symbol) {
   const db = load();
+  const before = db.portfolio.length;
   db.portfolio = db.portfolio.filter(p => p.symbol !== symbol.toUpperCase());
+  if (db.portfolio.length === before) return false;
   save();
   return db.portfolio;
 }
@@ -134,8 +136,11 @@ function addAlert(symbol, price, direction) {
 
 function removeAlert(id) {
   const db = load();
+  const before = db.alerts.length;
   db.alerts = db.alerts.filter(a => a.id !== id);
+  if (db.alerts.length === before) return false;
   save();
+  return true;
 }
 
 function triggerAlert(id) {

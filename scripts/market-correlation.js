@@ -93,6 +93,23 @@ function suggestion(v) {
 }
 
 async function main() {
+  if (process.argv[2] === '--help' || process.argv[2] === '-h') {
+    console.log(`
+使用方法:
+  node market-correlation.js [币种列表] [K线数量]
+
+参数:
+  币种列表    逗号分隔，默认: BTC,ETH,SOL,BNB,XRP
+  K线数量     1h K线数量，默认: 120
+
+示例:
+  node market-correlation.js
+  node market-correlation.js BTC,ETH,SOL,BNB 120
+  node market-correlation.js BTC,DOGE,SHIB 200
+`);
+    return;
+  }
+
   const argvSymbols = process.argv[2]
     ? process.argv[2].split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
     : DEFAULT_SYMBOLS;

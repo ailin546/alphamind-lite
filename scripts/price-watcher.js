@@ -120,19 +120,7 @@ async function fetchAllPrices() {
       prices[symbol] = data.price;
       stats[symbol] = data;
     } catch (e) {
-      // 使用Demo数据
-      const demoPrices = {
-        BTC: 73500, ETH: 3350, BNB: 620, SOL: 145,
-        XRP: 0.62, ADA: 0.58, DOGE: 0.085, AVAX: 42
-      };
-      prices[symbol] = demoPrices[symbol] || 100;
-      stats[symbol] = {
-        price: demoPrices[symbol] || 100,
-        change: 2.5,
-        high: (demoPrices[symbol] || 100) * 1.05,
-        low: (demoPrices[symbol] || 100) * 0.95,
-        volume: 1000000
-      };
+      console.log(`  ⚠️ ${symbol} 获取失败: ${e.message}`);
     }
   }
   

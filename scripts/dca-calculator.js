@@ -131,8 +131,31 @@ async function calculateDCA(symbol = 'BTC', monthlyAmount = 100, months = 12) {
 
 // CLI
 const args = process.argv.slice(2);
-const symbol = args[0] || 'BTC';
+
+if (args[0] === '--help' || args[0] === '-h') {
+  console.log(`
+使用方法:
+  node dca-calculator.js [币种] [每月金额] [月数]
+
+参数:
+  币种       默认: BTC (支持 Binance 上的任何币种)
+  每月金额   默认: $100
+  月数       默认: 12 (最大 36)
+
+示例:
+  node dca-calculator.js                  # BTC $100/月 × 12个月
+  node dca-calculator.js ETH 200 6        # ETH $200/月 × 6个月
+  node dca-calculator.js BTC 500 24       # BTC $500/月 × 24个月
+`);
+  process.exit(0);
+}
+
+const symbol = (args[0] || 'BTC').toUpperCase();
 const amount = parseFloat(args[1]) || 100;
 const months = parseInt(args[2]) || 12;
+
+if (amount <= 0) { console.log('❌ 每月金额必须为正数'); process.exit(1); }
+if (months <= 0 || months > 36) { console.log('❌ 月数范围: 1-36'); process.exit(1); }
+if (!/^[A-Z0-9]{1,10}$/.test(symbol)) { console.log('❌ 无效币种名称'); process.exit(1); }
 
 calculateDCA(symbol, amount, months).catch(console.error);

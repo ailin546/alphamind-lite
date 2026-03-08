@@ -63,6 +63,16 @@
     .badge { font-size:0.75em; padding:2px 6px; border-radius:3px; }
     .badge-active { background:rgba(0,204,255,0.15); color:var(--secondary); }
     .badge-triggered { background:rgba(0,255,136,0.15); color:var(--green); }
+    .form-row { display:flex; gap:8px; margin-bottom:10px; align-items:center; }
+    .form-row input, .form-row select { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:4px; font-family:inherit; font-size:0.85em; }
+    .form-row input { flex:1; min-width:0; }
+    .form-row select { min-width:80px; }
+    .btn { background:var(--primary); color:var(--bg); border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-family:inherit; font-size:0.85em; font-weight:bold; white-space:nowrap; }
+    .btn:hover { opacity:0.85; }
+    .btn-danger { background:var(--red); color:white; padding:3px 8px; font-size:0.75em; }
+    .msg { padding:6px 10px; border-radius:4px; font-size:0.85em; margin-bottom:8px; }
+    .msg-ok { background:rgba(0,255,136,0.1); color:var(--green); }
+    .msg-err { background:rgba(255,71,87,0.1); color:var(--red); }
     </style>
 </head>
 <body>
@@ -94,10 +104,24 @@
             </div>
             <div class="card" id="portfolio-tab" style="display:none">
                 <h3>Portfolio</h3>
+                <div id="portfolio-msg"></div>
+                <div class="form-row">
+                    <input id="pf-symbol" placeholder="Symbol (BTC)" maxlength="10">
+                    <input id="pf-amount" placeholder="Amount" type="number" step="any" min="0">
+                    <input id="pf-price" placeholder="Avg Price" type="number" step="any" min="0">
+                    <button class="btn" onclick="addHolding()">Add</button>
+                </div>
                 <div id="portfolio-content" class="portfolio-empty">Loading...</div>
             </div>
             <div class="card" id="alerts-tab" style="display:none">
                 <h3>Price Alerts</h3>
+                <div id="alerts-msg"></div>
+                <div class="form-row">
+                    <input id="al-symbol" placeholder="Symbol (BTC)" maxlength="10">
+                    <input id="al-price" placeholder="Price" type="number" step="any" min="0">
+                    <select id="al-dir"><option value="above">Above</option><option value="below">Below</option></select>
+                    <button class="btn" onclick="addAlertUI()">Add</button>
+                </div>
                 <div id="alerts-content">Loading...</div>
             </div>
         </div>
@@ -115,7 +139,7 @@
         </div>
     </div>
 
-    <div class="footer">AlphaMind Lite v9.0 | <a href="https://github.com/ailin546/alphamind-lite" target="_blank">GitHub</a> | Data from Binance</div>
+    <div class="footer">AlphaMind Lite v9.2 | <a href="https://github.com/ailin546/alphamind-lite" target="_blank">GitHub</a> | Data from Binance</div>
 </div>
 
 <script>
@@ -168,10 +192,10 @@ async function loadPortfolio(){
     if(!d.holdings||d.holdings.length===0){c.innerHTML='<div class="portfolio-empty">No holdings yet<code>node portfolio.js add BTC 0.5 68000</code></div>';return}
     const sign=d.totalPnl>=0?'+':'',dir=d.totalPnl>=0?'up':'down';
     let h=`<div class="pnl-total ${dir}">$${fmt(d.totalValue)} <span style="font-size:0.7em">(${sign}${d.totalPnlPercent.toFixed(2)}%)</span></div>`;
-    h+='<table><thead><tr><th>Symbol</th><th>Amount</th><th>Avg Price</th><th>Current</th><th>Value</th><th>P&L</th></tr></thead><tbody>';
+    h+='<table><thead><tr><th>Symbol</th><th>Amount</th><th>Avg Price</th><th>Current</th><th>Value</th><th>P&L</th><th></th></tr></thead><tbody>';
     for(const x of d.holdings){const hd=x.pnl>=0?'up':'down',hs=x.pnl>=0?'+':'';
-    h+=`<tr><td><strong>${x.symbol}</strong></td><td>${x.amount.toFixed(4)}</td><td>$${fmt(x.avgPrice)}</td><td>$${fmt(x.currentPrice)}</td><td>$${fmt(x.value)}</td><td class="${hd}">${hs}$${fmt(x.pnl)} (${hs}${x.pnlPercent.toFixed(1)}%)</td></tr>`}
-    h+='</tbody></table>';c.innerHTML=h}catch{c.innerHTML='<div class="portfolio-empty">Add holdings via CLI<code>node portfolio.js add BTC 0.5 68000</code></div>'}
+    h+=`<tr><td><strong>${x.symbol}</strong></td><td>${x.amount.toFixed(4)}</td><td>$${fmt(x.avgPrice)}</td><td>$${fmt(x.currentPrice)}</td><td>$${fmt(x.value)}</td><td class="${hd}">${hs}$${fmt(x.pnl)} (${hs}${x.pnlPercent.toFixed(1)}%)</td><td><button class="btn btn-danger" onclick="removeHoldingUI('${x.symbol}')">×</button></td></tr>`}
+    h+='</tbody></table>';c.innerHTML=h}catch{c.innerHTML='<div class="portfolio-empty">Use the form above to add holdings</div>'}
 }
 
 async function loadAlerts(){
@@ -179,7 +203,7 @@ async function loadAlerts(){
     try{const d=await api('/api/alerts');
     if(!d.alerts||d.alerts.length===0){c.innerHTML='<div style="color:var(--dim);padding:10px 0">No alerts<br><code style="color:var(--primary)">node alerts.js add BTC 80000 above</code></div>';return}
     let h='';for(const a of d.alerts){const dir=a.direction==='above'?'⬆':'⬇',b=a.triggered?'<span class="badge badge-triggered">Triggered</span>':'<span class="badge badge-active">Active</span>';
-    h+=`<div class="alert-item"><span>${a.symbol} ${dir} $${a.price.toLocaleString()}</span>${b}</div>`}c.innerHTML=h}catch{c.innerHTML='<div style="color:var(--dim)">Unable to load</div>'}
+    h+=`<div class="alert-item"><span>${a.symbol} ${dir} $${a.price.toLocaleString()}</span><span>${b} <button class="btn btn-danger" onclick="removeAlertUI('${a.id}')" style="margin-left:6px">×</button></span></div>`}c.innerHTML=h}catch{c.innerHTML='<div style="color:var(--dim)">Unable to load</div>'}
 }
 
 async function loadFunding(){
@@ -207,6 +231,38 @@ function connectSSE(){
     if(p){const dir=p.change>=0?'up':'down',sign=p.change>=0?'+':'';
     card.querySelector('.price').className='price '+dir;card.querySelector('.price').textContent='$'+fmt(p.price);
     card.querySelector('.change').className='change '+dir;card.querySelector('.change').textContent=sign+p.change.toFixed(2)+'%'}})}catch{}})}catch{}
+}
+
+function showMsg(elId,text,ok){const el=document.getElementById(elId);el.innerHTML=`<div class="msg ${ok?'msg-ok':'msg-err'}">${text}</div>`;setTimeout(()=>{el.innerHTML=''},3000)}
+
+async function postAPI(path,body){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Failed');return d}
+
+async function addHolding(){
+    const sym=document.getElementById('pf-symbol').value.trim().toUpperCase();
+    const amt=parseFloat(document.getElementById('pf-amount').value);
+    const price=parseFloat(document.getElementById('pf-price').value);
+    if(!sym){showMsg('portfolio-msg','Please enter a symbol',false);return}
+    if(isNaN(amt)||amt<=0){showMsg('portfolio-msg','Invalid amount',false);return}
+    if(isNaN(price)||price<=0){showMsg('portfolio-msg','Invalid price',false);return}
+    try{await postAPI('/api/portfolio/add',{symbol:sym,amount:amt,avgPrice:price});showMsg('portfolio-msg',`Added ${sym}`,true);document.getElementById('pf-symbol').value='';document.getElementById('pf-amount').value='';document.getElementById('pf-price').value='';loadPortfolio()}catch(e){showMsg('portfolio-msg',e.message,false)}
+}
+
+async function removeHoldingUI(sym){
+    if(!confirm(`Remove ${sym}?`))return;
+    try{await postAPI('/api/portfolio/remove',{symbol:sym});showMsg('portfolio-msg',`Removed ${sym}`,true);loadPortfolio()}catch(e){showMsg('portfolio-msg',e.message,false)}
+}
+
+async function addAlertUI(){
+    const sym=document.getElementById('al-symbol').value.trim().toUpperCase();
+    const price=parseFloat(document.getElementById('al-price').value);
+    const dir=document.getElementById('al-dir').value;
+    if(!sym){showMsg('alerts-msg','Please enter a symbol',false);return}
+    if(isNaN(price)||price<=0){showMsg('alerts-msg','Invalid price',false);return}
+    try{await postAPI('/api/alerts/add',{symbol:sym,price,direction:dir});showMsg('alerts-msg',`Alert added for ${sym}`,true);document.getElementById('al-symbol').value='';document.getElementById('al-price').value='';loadAlerts()}catch(e){showMsg('alerts-msg',e.message,false)}
+}
+
+async function removeAlertUI(id){
+    try{await postAPI('/api/alerts/remove',{id});loadAlerts()}catch(e){showMsg('alerts-msg',e.message,false)}
 }
 
 async function init(){
