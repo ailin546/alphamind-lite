@@ -2,16 +2,31 @@
   "name": "alphamind-lite",
   "version": "9.0.0",
   "description": "AI-powered cryptocurrency investment assistant with real-time market analysis, portfolio management, and intelligent trading advice",
-  "main": "server.js",
+  "main": "scripts/server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node scripts/server.js",
+    "dev": "NODE_ENV=development node scripts/server.js",
     "demo": "node scripts/demo.js",
-    "interactive": "node scripts/demo-interactive.js"
+    "interactive": "node scripts/demo-interactive.js",
+    "monitor": "node scripts/price-monitor-worker.js",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:reload": "pm2 reload ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:logs": "pm2 logs",
+    "docker:build": "docker build -t alphamind-lite .",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "test": "node scripts/test.js",
+    "health": "curl -s http://localhost:3000/health | node -e \"process.stdin.on('data',d=>console.log(JSON.parse(d)))\"",
+    "validate": "for f in scripts/*.js config/*.js; do node -c \"$f\"; done"
   },
   "keywords": [
     "cryptocurrency",
+    "bitcoin",
     "trading",
     "ai",
+    "investment",
     "binance",
     "portfolio",
     "risk-management",
@@ -22,9 +37,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ailin546/alphamind-lite"
+    "url": "https://github.com/ailin546/alphamind-lite.git"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }
