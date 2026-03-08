@@ -9,7 +9,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { getLogger, createLogger } = require('./logger');
-const { fetchMarketData, fetchFearGreedIndex } = require('./api-client');
+const { fetchMarketData, fetchFearGreedIndex, fetchMultiplePrices, fetchFundingRates } = require('./api-client');
+const db = require('./db');
 
 createLogger({ context: 'server' });
 const log = getLogger('server');
@@ -198,12 +199,119 @@ function serveStatic(req, res) {
   });
 }
 
+// ---- Portfolio API ----
+async function handlePortfolio(req, res) {
+  try {
+    const portfolio = db.getPortfolio();
+    if (portfolio.length === 0) {
+      sendJSON(res, 200, { holdings: [], totalValue: 0, totalCost: 0, totalPnl: 0, totalPnlPercent: 0 });
+      return;
+    }
+
+    const symbols = portfolio.map(p => p.symbol);
+    const prices = await fetchMultiplePrices(symbols);
+    const priceMap = {};
+    prices.forEach(p => { if (p.price) priceMap[p.symbol] = p.price; });
+
+    let totalValue = 0, totalCost = 0;
+    const holdings = [];
+
+    for (const p of portfolio) {
+      const price = priceMap[p.symbol];
+      if (!price) continue;
+      const value = p.amount * price;
+      const cost = p.amount * p.avgPrice;
+      const pnl = value - cost;
+      const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0;
+      totalValue += value;
+      totalCost += cost;
+      holdings.push({ symbol: p.symbol, amount: p.amount, avgPrice: p.avgPrice, currentPrice: price, value, cost, pnl, pnlPercent });
+    }
+
+    const totalPnl = totalValue - totalCost;
+    const totalPnlPercent = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+    sendJSON(res, 200, { holdings, totalValue, totalCost, totalPnl, totalPnlPercent });
+  } catch (err) {
+    log.error('Portfolio error', { error: err.message });
+    metrics.errors++;
+    sendJSON(res, 500, { error: 'Failed to load portfolio' });
+  }
+}
+
+// ---- Alerts API ----
+function handleAlerts(req, res) {
+  const alerts = db.getAlerts();
+  sendJSON(res, 200, { alerts });
+}
+
+// ---- Funding Rates API ----
+async function handleFunding(req, res) {
+  try {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
+    const results = await Promise.all(
+      symbols.map(s => fetchFundingRates(s).then(d => ({
+        symbol: s,
+        rate: parseFloat(d.lastFundingRate),
+        markPrice: parseFloat(d.markPrice),
+        apy: parseFloat(d.lastFundingRate) * 3 * 365 * 100,
+      })).catch(() => null))
+    );
+    const rates = results.filter(Boolean).sort((a, b) => Math.abs(b.rate) - Math.abs(a.rate));
+    sendJSON(res, 200, { rates });
+  } catch (err) {
+    log.error('Funding error', { error: err.message });
+    metrics.errors++;
+    sendJSON(res, 502, { error: 'Failed to fetch funding rates' });
+  }
+}
+
+// ---- SSE Stream ----
+const sseClients = new Set();
+
+function handleSSE(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  res.write('event: connected\ndata: ok\n\n');
+  sseClients.add(res);
+
+  req.on('close', () => { sseClients.delete(res); });
+}
+
+// Broadcast prices every 15s to SSE clients
+setInterval(async () => {
+  if (sseClients.size === 0) return;
+  try {
+    const symbols = ['BTC', 'ETH', 'BNB', 'SOL'];
+    const results = await Promise.all(
+      symbols.map(s => fetchMarketData(`${s}USDT`).then(d => ({
+        symbol: s,
+        price: parseFloat(d.lastPrice),
+        change: parseFloat(d.priceChangePercent),
+      })).catch(() => null))
+    );
+    const data = results.filter(Boolean);
+    const msg = `event: prices\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+      try { client.write(msg); } catch { sseClients.delete(client); }
+    }
+  } catch {}
+}, 15000);
+
 // ---- Router ----
 const routes = {
   'GET /health': handleHealth,
   'GET /ready': handleReadiness,
   'GET /api/market': handleMarket,
   'GET /api/sentiment': handleSentiment,
+  'GET /api/portfolio': handlePortfolio,
+  'GET /api/alerts': handleAlerts,
+  'GET /api/funding': handleFunding,
+  'GET /api/stream': handleSSE,
   'GET /metrics': handleMetrics,
 };
 

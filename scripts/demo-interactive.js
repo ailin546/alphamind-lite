@@ -1,89 +1,85 @@
 #!/usr/bin/env node
 /**
- * AlphaMind Lite - Interactive Demo Menu
- * 交互式演示菜单
+ * AlphaMind Lite - Interactive Menu
+ * 真正可交互的功能选择菜单
  */
 
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const readline = require('readline');
+const path = require('path');
 
-const MENU = `
-╔═══════════════════════════════════════════════════════════════════╗
-║           🤖 AlphaMind Lite - 功能演示菜单                  ║
-╚═══════════════════════════════════════════════════════════════════╝
+const SCRIPTS_DIR = path.join(__dirname);
 
-  1️⃣  📊 市场概览      - 主流币种实时行情
-  2️⃣  🎯 恐慌指数     - Fear & Greed Index
-  3️⃣  💼 持仓分析     - 多币种盈亏计算
-  4️⃣  📡 情报监控     - 最新公告新闻
-  5️⃣  🛡️ 风控预警     - 仓位风险检测
-  6️⃣  🔔 价格监控     - 阈值报警设置
-  7️⃣  📈 市场情绪     - 综合情绪分析
-  8️⃣  🔍 套利扫描     - 波动机会发现
-  
-  9️⃣  🚀 完整演示     - 所有功能一次展示
-  
-  0️⃣  📖 帮助        - 使用说明
-  
-  ❌ 退出
+const MENU_ITEMS = [
+  { key: '1', label: '📊 市场概览', desc: '主流币种实时行情', script: 'demo.js' },
+  { key: '2', label: '🎯 恐慌指数', desc: 'Fear & Greed Index 分析', script: 'fear-greed.js' },
+  { key: '3', label: '💼 持仓分析', desc: '投资组合盈亏分析', script: 'portfolio.js' },
+  { key: '4', label: '📈 市场情绪', desc: '综合市场情绪分析', script: 'market-sentiment.js' },
+  { key: '5', label: '🔔 价格提醒', desc: '设置价格阈值提醒', script: 'alerts.js' },
+  { key: '6', label: '👀 价格监控', desc: '多币种实时监控', script: 'price-watcher.js' },
+  { key: '7', label: '🛡️ 仓位风控', desc: '杠杆仓位风险计算', script: 'position-risk.js' },
+  { key: '8', label: '🔍 套利扫描', desc: '现货-合约价差分析', script: 'arbitrage.js' },
+  { key: '9', label: '💹 资金费率', desc: '永续合约费率套利', script: 'funding-arbitrage.js' },
+  { key: 'a', label: '💰 定投计算', desc: '历史模拟 DCA 收益', script: 'dca-calculator.js' },
+  { key: 'b', label: '🐋 大户监控', desc: '链上巨鲸活动追踪', script: 'whale-alert.js' },
+  { key: 'c', label: '💼 管理持仓', desc: '添加/删除/修改持仓', script: 'portfolio.js', args: ['interactive'] },
+];
 
-───────────────────────────────────────────────────────────
-请输入选项 [0-9]:
-`;
+function printMenu() {
+  console.clear();
+  console.log(`
+╔════════════════════════════════════════════════════════════════╗
+║             🤖 AlphaMind Lite - 交互式菜单                ║
+╚════════════════════════════════════════════════════════════════╝
+`);
+  for (const item of MENU_ITEMS) {
+    console.log(`   ${item.key})  ${item.label.padEnd(14)} ${item.desc}`);
+  }
+  console.log(`
+   q)  ❌ 退出
+`);
+  console.log('─'.repeat(62));
+}
 
-const COMMANDS = {
-  '1': { cmd: 'curl -s "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"', desc: '📊 BTC 行情' },
-  '2': { script: 'fear-greed.js', desc: '🎯 恐慌指数' },
-  '3': { script: 'portfolio.js', desc: '💼 持仓分析' },
-  '4': { script: 'tavily-news.js', desc: '📡 情报监控' },
-  '5': { script: 'position-risk.js', desc: '🛡️ 风控预警' },
-  '6': { script: 'price-watcher.js', desc: '🔔 价格监控' },
-  '7': { script: 'market-sentiment.js', desc: '📈 市场情绪' },
-  '8': { script: 'arbitrage.js', desc: '🔍 套利扫描' },
-  '9': { script: 'comprehensive-demo.js', desc: '🚀 完整演示' },
-};
-
-const HELP = `
-╔═══════════════════════════════════════════════════════════════════╗
-║                    📖 AlphaMind Lite 使用帮助                  ║
-╚═══════════════════════════════════════════════════════════════════╝
-
-【快速开始】
-  git clone https://github.com/ailin546/alphamind-lite
-  cd alphamind-lite
-  node scripts/demo-interactive.js
-
-【单独运行功能】
-  node scripts/comprehensive-demo.js   # 完整演示
-  node scripts/portfolio.js          # 持仓分析
-  node scripts/fear-greed.js         # 恐慌指数
-  node scripts/market-sentiment.js   # 市场情绪
-
-【配置】
-  编辑 scripts/user-ai-chat.js 填入你的 API Key
-
-【更多】
-  查看 docs/ 目录下的详细文档
-
-───────────────────────────────────────────────────────────
-`;
-
-function run(cmd) {
-  try { return execSync(cmd, { encoding: 'utf8', maxBuffer: 10*1024*1024 }); }
-  catch (e) { return e.message; }
+function runScript(scriptName, args = []) {
+  const scriptPath = path.join(SCRIPTS_DIR, scriptName);
+  try {
+    const result = execSync(
+      `node "${scriptPath}" ${args.join(' ')}`,
+      { encoding: 'utf8', stdio: 'inherit', maxBuffer: 10 * 1024 * 1024 }
+    );
+  } catch (e) {
+    // execSync with stdio:inherit already printed output
+  }
 }
 
 async function main() {
-  console.log(MENU);
-  
-  // Auto-run option 9 for demo
-  console.log('\n🎬 正在启动完整演示...\n');
-  
-  const result = run('node /root/.openclaw/workspace/binance-contest/scripts/comprehensive-demo.js');
-  console.log(result);
-  
-  console.log('\n✅ 演示完成！');
-  console.log('运行 node scripts/demo-interactive.js 选择其他功能');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise(resolve => rl.question(q, resolve));
+
+  while (true) {
+    printMenu();
+    const choice = (await ask('  请选择 [1-9, a-c, q]: ')).trim().toLowerCase();
+
+    if (choice === 'q' || choice === 'exit') {
+      console.log('\n  👋 再见！祝交易顺利！\n');
+      break;
+    }
+
+    const item = MENU_ITEMS.find(m => m.key === choice);
+    if (!item) {
+      console.log('\n  ❌ 无效选项，请重新选择');
+      await ask('  按回车继续...');
+      continue;
+    }
+
+    console.log(`\n  🚀 启动: ${item.label}\n`);
+    runScript(item.script, item.args || []);
+
+    await ask('\n  按回车返回菜单...');
+  }
+
+  rl.close();
 }
 
-main();
+main().catch(console.error);

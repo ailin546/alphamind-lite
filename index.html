@@ -3,467 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlphaMind Lite | AI Trading Partner</title>
+    <title>AlphaMind Lite | Dashboard</title>
     <style>
     :root {
         --bg: #0a0a0f;
-        --bg-alt: #12121a;
+        --bg-card: #12121a;
         --primary: #00ff88;
         --secondary: #00ccff;
-        --accent: #ff00aa;
+        --green: #00ff88;
+        --red: #ff4757;
         --text: #e0e0e0;
-        --text-dim: #888;
+        --dim: #666;
         --border: #1a1a2e;
     }
-    
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body {
-        font-family: 'SF Mono', 'Fira Code', monospace;
-        background: var(--bg);
-        color: var(--text);
-        line-height: 1.6;
-        overflow-x: hidden;
-    }
-    
-    /* Matrix rain effect */
-    .matrix {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        opacity: 0.03;
-        z-index: 0;
-    }
-    
-    .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 20px;
-        position: relative;
-        z-index: 1;
-    }
-    
-    /* Header */
-    header {
-        text-align: center;
-        padding: 60px 0;
-        border-bottom: 1px solid var(--border);
-    }
-    
-    .logo {
-        font-size: 3em;
-        font-weight: bold;
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: glow 2s ease-in-out infinite alternate;
-    }
-    
-    @keyframes glow {
-        from { filter: drop-shadow(0 0 10px var(--primary)); }
-        to { filter: drop-shadow(0 0 20px var(--secondary)); }
-    }
-    
-    .tagline {
-        color: var(--text-dim);
-        margin-top: 10px;
-        font-size: 1.1em;
-    }
-    
-    .lang-switch {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 8px 16px;
-        background: var(--bg-alt);
-        border: 1px solid var(--border);
-        color: var(--primary);
-        cursor: pointer;
-        font-family: inherit;
-        transition: all 0.3s;
-    }
-    
-    .lang-switch:hover {
-        background: var(--primary);
-        color: var(--bg);
-    }
-    
-    /* Navigation */
-    nav {
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-        padding: 30px 0;
-        flex-wrap: wrap;
-    }
-    
-    nav a {
-        padding: 10px 20px;
-        color: var(--text-dim);
-        text-decoration: none;
-        border: 1px solid var(--border);
-        transition: all 0.3s;
-    }
-    
-    nav a:hover {
-        color: var(--primary);
-        border-color: var(--primary);
-        box-shadow: 0 0 15px var(--primary);
-    }
-    
-    /* Sections */
-    section {
-        padding: 60px 0;
-    }
-    
-    h2 {
-        font-size: 2em;
-        margin-bottom: 30px;
-        color: var(--primary);
-        border-left: 3px solid var(--accent);
-        padding-left: 15px;
-    }
-    
-    /* Features Grid */
-    .features {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 20px;
-    }
-    
-    .feature-card {
-        background: var(--bg-alt);
-        border: 1px solid var(--border);
-        padding: 25px;
-        transition: all 0.3s;
-        cursor: pointer;
-    }
-    
-    .feature-card:hover {
-        border-color: var(--primary);
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0,255,136,0.1);
-    }
-    
-    .feature-card .icon {
-        font-size: 2em;
-        margin-bottom: 15px;
-    }
-    
-    .feature-card h3 {
-        color: var(--secondary);
-        margin-bottom: 10px;
-    }
-    
-    .feature-card p {
-        color: var(--text-dim);
-        font-size: 0.9em;
-    }
-    
-    /* Terminal */
-    .terminal {
-        background: #0d0d15;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    .terminal-header {
-        background: var(--bg-alt);
-        padding: 10px 15px;
-        display: flex;
-        gap: 8px;
-    }
-    
-    .terminal-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-    }
-    
-    .dot-red { background: #ff5f56; }
-    .dot-yellow { background: #ffbd2e; }
-    .dot-green { background: #27ca40; }
-    
-    .terminal-body {
-        padding: 20px;
-        font-family: 'SF Mono', monospace;
-    }
-    
-    .cmd { color: var(--secondary); }
-    .output { color: var(--primary); }
-    .error { color: var(--accent); }
-    
-    /* Stats */
-    .stats {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 20px;
-        text-align: center;
-    }
-    
-    .stat {
-        padding: 30px;
-        background: var(--bg-alt);
-        border: 1px solid var(--border);
-    }
-    
-    .stat-number {
-        font-size: 2.5em;
-        color: var(--primary);
-        font-weight: bold;
-    }
-    
-    .stat-label {
-        color: var(--text-dim);
-        margin-top: 10px;
-    }
-    
-    /* Footer */
-    footer {
-        text-align: center;
-        padding: 40px;
-        border-top: 1px solid var(--border);
-        color: var(--text-dim);
-    }
-    
-    footer a {
-        color: var(--primary);
-        text-decoration: none;
-    }
-    
-    /* Animations */
-    @keyframes blink {
-        0%, 50% { opacity: 1; }
-        51%, 100% { opacity: 0; }
-    }
-    
-    .cursor {
-        display: inline-block;
-        width: 10px;
-        height: 1.2em;
-        background: var(--primary);
-        animation: blink 1s infinite;
-    }
-    
-    /* Responsive */
-    @media (max-width: 768px) {
-        .stats { grid-template-columns: repeat(2, 1fr); }
-        .logo { font-size: 2em; }
-    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'SF Mono','Fira Code','Courier New',monospace; background:var(--bg); color:var(--text); }
+    .app { max-width:1400px; margin:0 auto; padding:16px; }
+    .header { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); margin-bottom:20px; }
+    .header h1 { font-size:1.4em; background:linear-gradient(90deg,var(--primary),var(--secondary)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .header .status { display:flex; align-items:center; gap:8px; font-size:0.85em; color:var(--dim); }
+    .header .dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .grid { display:grid; gap:16px; }
+    .grid-top { grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+    .grid-main { grid-template-columns:2fr 1fr; }
+    @media(max-width:900px) { .grid-main { grid-template-columns:1fr; } }
+    .card { background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:16px; }
+    .card h3 { color:var(--secondary); font-size:0.9em; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
+    .price-card { text-align:center; cursor:pointer; transition:border-color 0.3s; }
+    .price-card:hover { border-color:var(--primary); }
+    .price-card .symbol { font-size:1.1em; font-weight:bold; margin-bottom:4px; }
+    .price-card .price { font-size:1.5em; font-weight:bold; margin:8px 0; }
+    .price-card .change { font-size:0.9em; padding:2px 8px; border-radius:4px; }
+    .up { color:var(--green); } .down { color:var(--red); }
+    .change.up { background:rgba(0,255,136,0.1); } .change.down { background:rgba(255,71,87,0.1); }
+    table { width:100%; border-collapse:collapse; font-size:0.85em; }
+    th { text-align:left; color:var(--dim); padding:8px 4px; border-bottom:1px solid var(--border); font-weight:normal; }
+    td { padding:8px 4px; border-bottom:1px solid rgba(255,255,255,0.03); }
+    .gauge { text-align:center; padding:20px 0; }
+    .gauge-value { font-size:3em; font-weight:bold; }
+    .gauge-label { font-size:1.1em; margin-top:8px; }
+    .gauge-bar { width:100%; height:8px; background:linear-gradient(90deg,var(--red),#ff9f43,#feca57,var(--green)); border-radius:4px; margin-top:16px; position:relative; }
+    .gauge-marker { position:absolute; top:-4px; width:16px; height:16px; background:white; border-radius:50%; transform:translateX(-50%); box-shadow:0 0 8px rgba(255,255,255,0.5); transition:left 1s ease; }
+    .pnl-total { font-size:1.3em; font-weight:bold; margin-bottom:12px; }
+    .portfolio-empty { color:var(--dim); text-align:center; padding:30px; }
+    .portfolio-empty code { display:block; margin-top:10px; color:var(--primary); font-size:0.9em; }
+    .loading { color:var(--dim); text-align:center; padding:20px; }
+    .spin { display:inline-block; animation:spin 1s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .footer { text-align:center; padding:20px; color:var(--dim); font-size:0.8em; margin-top:20px; border-top:1px solid var(--border); }
+    .footer a { color:var(--primary); text-decoration:none; }
+    .tabs { display:flex; gap:0; margin-bottom:16px; }
+    .tab { padding:8px 16px; border:1px solid var(--border); background:none; color:var(--dim); cursor:pointer; font-family:inherit; font-size:0.85em; transition:all 0.2s; }
+    .tab:first-child { border-radius:4px 0 0 4px; }
+    .tab:last-child { border-radius:0 4px 4px 0; }
+    .tab.active { background:var(--primary); color:var(--bg); border-color:var(--primary); }
+    .alert-item { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.03); }
+    .alert-item:last-child { border-bottom:none; }
+    .badge { font-size:0.75em; padding:2px 6px; border-radius:3px; }
+    .badge-active { background:rgba(0,204,255,0.15); color:var(--secondary); }
+    .badge-triggered { background:rgba(0,255,136,0.15); color:var(--green); }
     </style>
 </head>
 <body>
-    <canvas class="matrix" id="matrix"></canvas>
-    
-    <button class="lang-switch" onclick="toggleLang()">EN / 中文</button>
-    
-    <div class="container">
-        <header>
-            <div class="logo">AlphaMind Lite 🦞</div>
-            <div class="tagline">7×24 小时币安智能交易伙伴 | 7×24h AI Trading Partner</div>
-        </header>
-        
-        <nav>
-            <a href="#features">功能 Features</a>
-            <a href="#demo">演示 Demo</a>
-            <a href="#stats">统计 Stats</a>
-            <a href="#docs">文档 Docs</a>
-            <a href="#contact">联系 Contact</a>
-        </nav>
-        
-        <section id="features">
-            <h2>✨ 核心功能 | Core Features</h2>
-            <div class="features">
-                <div class="feature-card">
-                    <div class="icon">📊</div>
-                    <h3>实时行情 | Market Data</h3>
-                    <p>毫秒级获取 Binance 主流币种实时价格 | Millisecond-level Binance price fetching</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🎯</div>
-                    <h3>恐慌指数 | Fear Index</h3>
-                    <p>Fear & Greed Index + AI 分析 | AI-powered sentiment analysis</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">💼</div>
-                    <h3>持仓分析 | Portfolio</h3>
-                    <p>多币种盈亏智能计算 | Multi-coin P&L calculation</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">📡</div>
-                    <h3>情报监控 | Intelligence</h3>
-                    <p>7×24 小时监控公告新闻 | 24/7 announcement monitoring</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🛡️</div>
-                    <h3>风控预警 | Risk Alerts</h3>
-                    <p>实时仓位健康检测 | Real-time position health</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🔔</div>
-                    <h3>价格提醒 | Price Alerts</h3>
-                    <p>自定义阈值推送 | Custom threshold notifications</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">📈</div>
-                    <h3>市场情绪 | Sentiment</h3>
-                    <p>综合市场情绪分析 | Comprehensive sentiment analysis</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🤖</div>
-                    <h3>AI 对话 | AI Chat</h3>
-                    <p>自然语言交互 | Natural language interaction</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🔍</div>
-                    <h3>套利扫描 | Arbitrage</h3>
-                    <p>波动机会发现 | Opportunity discovery</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">💰</div>
-                    <h3>定投计算 | DCA</h3>
-                    <p>美元成本平均法计算 | Dollar cost averaging</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🐋</div>
-                    <h3>巨鲸监控 | Whale Alert</h3>
-                    <p>大户活动追踪 | Large holder tracking</p>
-                </div>
-                <div class="feature-card">
-                    <div class="icon">🎮</div>
-                    <h3>交互菜单 | Interactive</h3>
-                    <p>可视化功能选择 | Visual feature selection</p>
-                </div>
-            </div>
-        </section>
-        
-        <section id="demo">
-            <h2>🚀 演示 | Demo</h2>
-            <div class="terminal">
-                <div class="terminal-header">
-                    <span class="terminal-dot dot-red"></span>
-                    <span class="terminal-dot dot-yellow"></span>
-                    <span class="terminal-dot dot-green"></span>
-                </div>
-                <div class="terminal-body">
-                    <div><span class="cmd">$</span> <span class="output">git clone https://github.com/ailin546/alphamind-lite.git</span></div>
-                    <div><span class="cmd">$</span> <span class="output">cd alphamind-lite</span></div>
-                    <div><span class="cmd">$</span> <span class="output">node scripts/demo.js</span></div>
-                    <div>&nbsp;</div>
-                    <div><span class="output">╔═══════════════════════════════════════╗</span></div>
-                    <div><span class="output">║  🤖 AlphaMind Lite v7.0         ║</span></div>
-                    <div><span class="output">╚═══════════════════════════════════════╝</span></div>
-                    <div><span class="output">📊 BTC: $71,652 (+2.51%)</span> <span class="cursor"></span></div>
-                </div>
-            </div>
-        </section>
-        
-        <section id="stats">
-            <h2>📊 项目统计 | Stats</h2>
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-number">18</div>
-                    <div class="stat-label">脚本 Scripts</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number">18</div>
-                    <div class="stat-label">文档 Docs</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number">6</div>
-                    <div class="stat-label">代理 Agents</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number">2</div>
-                    <div class="stat-label">语言 Languages</div>
-                </div>
-            </div>
-        </section>
-        
-        <section id="docs">
-            <h2>📚 文档 | Documentation</h2>
-            <div class="features">
-                <div class="feature-card">
-                    <h3>📖 产品规格</h3>
-                    <p>product-spec.md</p>
-                </div>
-                <div class="feature-card">
-                    <h3>📊 商业计划</h3>
-                    <p>business-plan.md</p>
-                </div>
-                <div class="feature-card">
-                    <h3>🗺️ 产品路线图</h3>
-                    <p>roadmap.md</p>
-                </div>
-                <div class="feature-card">
-                    <h3>❓ 常见问题</h3>
-                    <p>faq.md</p>
-                </div>
-            </div>
-        </section>
-        
-        <section id="contact">
-            <h2>🔗 联系 | Contact</h2>
-            <div class="features">
-                <div class="feature-card">
-                    <h3>🐙 GitHub</h3>
-                    <p><a href="https://github.com/ailin546/alphamind-lite">github.com/ailin546</a></p>
-                </div>
-                <div class="feature-card">
-                    <h3>📦 安装</h3>
-                    <p>npm install 或直接运行</p>
-                </div>
-            </div>
-        </section>
-        
-        <footer>
-            <p>AlphaMind Lite © 2026 | MIT License</p>
-            <p>让 AI 成为你的交易伙伴 | Let AI be your trading partner 💪</p>
-        </footer>
+<div class="app">
+    <div class="header">
+        <h1>AlphaMind Lite</h1>
+        <div class="status"><span class="dot"></span> <span id="status-text">Connecting...</span></div>
     </div>
-    
-    <script>
-    // Matrix rain effect
-    const canvas = document.getElementById('matrix');
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
-    const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
-    const fontSize = 14;
-    const columns = canvas.width / fontSize;
-    const drops = [];
-    
-    for (let i = 0; i < columns; i++) drops[i] = 1;
-    
-    function draw() {
-        ctx.fillStyle = 'rgba(10, 10, 15, 0.05)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#00ff88';
-        ctx.font = fontSize + 'px monospace';
-        
-        for (let i = 0; i < drops.length; i++) {
-            const char = chars[Math.floor(Math.random() * chars.length)];
-            ctx.fillText(char, i * fontSize, drops[i] * fontSize);
-            if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                drops[i] = 0;
-            }
-            drops[i]++;
-        }
-    }
-    
-    setInterval(draw, 50);
-    
-    // Language toggle
-    let isZh = true;
-    function toggleLang() {
-        isZh = !isZh;
-        // Simplified toggle - in real implementation would swap all text
-    }
-    </script>
+
+    <div class="grid grid-top" id="price-cards">
+        <div class="card price-card loading"><span class="spin">&#x21bb;</span> Loading...</div>
+    </div>
+
+    <div style="height:16px"></div>
+
+    <div class="grid grid-main">
+        <div>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(this,'market-tab')">Market</button>
+                <button class="tab" onclick="switchTab(this,'portfolio-tab')">Portfolio</button>
+                <button class="tab" onclick="switchTab(this,'alerts-tab')">Alerts</button>
+            </div>
+            <div class="card" id="market-tab">
+                <h3>Market Overview</h3>
+                <table>
+                    <thead><tr><th>Symbol</th><th>Price</th><th>24h Change</th><th>24h High</th><th>24h Low</th><th>Volume</th></tr></thead>
+                    <tbody id="market-table"><tr><td colspan="6" class="loading"><span class="spin">&#x21bb;</span></td></tr></tbody>
+                </table>
+            </div>
+            <div class="card" id="portfolio-tab" style="display:none">
+                <h3>Portfolio</h3>
+                <div id="portfolio-content" class="portfolio-empty">Loading...</div>
+            </div>
+            <div class="card" id="alerts-tab" style="display:none">
+                <h3>Price Alerts</h3>
+                <div id="alerts-content">Loading...</div>
+            </div>
+        </div>
+
+        <div>
+            <div class="card">
+                <h3>Fear &amp; Greed Index</h3>
+                <div class="gauge" id="sentiment-gauge"><div class="loading"><span class="spin">&#x21bb;</span></div></div>
+            </div>
+            <div style="height:16px"></div>
+            <div class="card">
+                <h3>Funding Rates</h3>
+                <div id="funding-content" class="loading"><span class="spin">&#x21bb;</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">AlphaMind Lite v9.0 | <a href="https://github.com/ailin546/alphamind-lite" target="_blank">GitHub</a> | Data from Binance</div>
+</div>
+
+<script>
+const API = window.location.origin;
+const SYMBOLS = ['BTC','ETH','BNB','SOL','XRP','ADA','DOGE','AVAX'];
+function fmt(n,d=2){return Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d})}
+async function api(path){const r=await fetch(API+path);if(!r.ok)throw new Error('API '+r.status);return r.json()}
+
+async function loadPrices(){
+    const c=document.getElementById('price-cards');
+    try{
+        const res=await Promise.all(['BTC','ETH','BNB','SOL'].map(s=>api('/api/market?symbol='+s+'USDT').catch(()=>null)));
+        c.innerHTML='';
+        for(const d of res){if(!d)continue;const s=d.symbol.replace('USDT',''),p=parseFloat(d.lastPrice),ch=parseFloat(d.priceChangePercent),dir=ch>=0?'up':'down',sign=ch>=0?'+':'';
+        c.innerHTML+=`<div class="card price-card"><div class="symbol">${s}</div><div class="price ${dir}">$${fmt(p)}</div><span class="change ${dir}">${sign}${ch.toFixed(2)}%</span></div>`}
+    }catch{c.innerHTML='<div class="card">Failed to load</div>'}
+}
+
+async function loadMarketTable(){
+    const tb=document.getElementById('market-table');
+    try{
+        const res=await Promise.all(SYMBOLS.map(s=>api('/api/market?symbol='+s+'USDT').catch(()=>null)));
+        tb.innerHTML='';
+        for(const d of res){if(!d)continue;const s=d.symbol.replace('USDT',''),p=parseFloat(d.lastPrice),ch=parseFloat(d.priceChangePercent),hi=parseFloat(d.highPrice),lo=parseFloat(d.lowPrice),v=parseFloat(d.quoteVolume),dir=ch>=0?'up':'down',sign=ch>=0?'+':'';
+        tb.innerHTML+=`<tr><td><strong>${s}</strong></td><td>$${fmt(p)}</td><td class="${dir}">${sign}${ch.toFixed(2)}%</td><td>$${fmt(hi)}</td><td>$${fmt(lo)}</td><td>$${(v/1e6).toFixed(1)}M</td></tr>`}
+    }catch{tb.innerHTML='<tr><td colspan="6">Failed</td></tr>'}
+}
+
+async function loadSentiment(){
+    const g=document.getElementById('sentiment-gauge');
+    try{const d=await api('/api/sentiment');const v=parseInt(d.data[0].value),l=d.data[0].value_classification;
+    let c=v<25?'var(--red)':v<45?'#ff9f43':v<55?'#feca57':'var(--green)';
+    g.innerHTML=`<div class="gauge-value" style="color:${c}">${v}</div><div class="gauge-label">${l}</div><div class="gauge-bar"><div class="gauge-marker" style="left:${v}%"></div></div>`}catch{g.innerHTML='<div style="color:var(--dim)">Unable to load</div>'}
+}
+
+async function loadPortfolio(){
+    const c=document.getElementById('portfolio-content');
+    try{const d=await api('/api/portfolio');
+    if(!d.holdings||d.holdings.length===0){c.innerHTML='<div class="portfolio-empty">No holdings yet<code>node portfolio.js add BTC 0.5 68000</code></div>';return}
+    const sign=d.totalPnl>=0?'+':'',dir=d.totalPnl>=0?'up':'down';
+    let h=`<div class="pnl-total ${dir}">$${fmt(d.totalValue)} <span style="font-size:0.7em">(${sign}${d.totalPnlPercent.toFixed(2)}%)</span></div>`;
+    h+='<table><thead><tr><th>Symbol</th><th>Amount</th><th>Avg Price</th><th>Current</th><th>Value</th><th>P&L</th></tr></thead><tbody>';
+    for(const x of d.holdings){const hd=x.pnl>=0?'up':'down',hs=x.pnl>=0?'+':'';
+    h+=`<tr><td><strong>${x.symbol}</strong></td><td>${x.amount.toFixed(4)}</td><td>$${fmt(x.avgPrice)}</td><td>$${fmt(x.currentPrice)}</td><td>$${fmt(x.value)}</td><td class="${hd}">${hs}$${fmt(x.pnl)} (${hs}${x.pnlPercent.toFixed(1)}%)</td></tr>`}
+    h+='</tbody></table>';c.innerHTML=h}catch{c.innerHTML='<div class="portfolio-empty">Add holdings via CLI<code>node portfolio.js add BTC 0.5 68000</code></div>'}
+}
+
+async function loadAlerts(){
+    const c=document.getElementById('alerts-content');
+    try{const d=await api('/api/alerts');
+    if(!d.alerts||d.alerts.length===0){c.innerHTML='<div style="color:var(--dim);padding:10px 0">No alerts<br><code style="color:var(--primary)">node alerts.js add BTC 80000 above</code></div>';return}
+    let h='';for(const a of d.alerts){const dir=a.direction==='above'?'⬆':'⬇',b=a.triggered?'<span class="badge badge-triggered">Triggered</span>':'<span class="badge badge-active">Active</span>';
+    h+=`<div class="alert-item"><span>${a.symbol} ${dir} $${a.price.toLocaleString()}</span>${b}</div>`}c.innerHTML=h}catch{c.innerHTML='<div style="color:var(--dim)">Unable to load</div>'}
+}
+
+async function loadFunding(){
+    const c=document.getElementById('funding-content');
+    try{const d=await api('/api/funding');
+    if(!d.rates||d.rates.length===0){c.innerHTML='<div style="color:var(--dim)">No data</div>';return}
+    let h='<table><thead><tr><th>Pair</th><th>Rate</th><th>APY</th></tr></thead><tbody>';
+    for(const r of d.rates.slice(0,8)){const dir=r.rate>=0?'up':'down',sign=r.rate>=0?'+':'';
+    h+=`<tr><td>${r.symbol.replace('USDT','')}</td><td class="${dir}">${sign}${(r.rate*100).toFixed(4)}%</td><td class="${dir}">${sign}${r.apy.toFixed(1)}%</td></tr>`}
+    h+='</tbody></table>';c.innerHTML=h}catch{c.innerHTML='<div style="color:var(--dim)">Unable to load</div>'}
+}
+
+function switchTab(btn,id){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
+    ['market-tab','portfolio-tab','alerts-tab'].forEach(i=>{document.getElementById(i).style.display=i===id?'block':'none'})
+}
+
+function connectSSE(){
+    try{const es=new EventSource(API+'/api/stream');
+    es.onopen=()=>{document.getElementById('status-text').textContent='Live'};
+    es.onerror=()=>{document.getElementById('status-text').textContent='Reconnecting...'};
+    es.addEventListener('prices',e=>{try{const prices=JSON.parse(e.data);
+    const cards=document.querySelectorAll('.price-card');
+    cards.forEach(card=>{const sym=card.querySelector('.symbol')?.textContent;const p=prices.find(x=>x.symbol===sym);
+    if(p){const dir=p.change>=0?'up':'down',sign=p.change>=0?'+':'';
+    card.querySelector('.price').className='price '+dir;card.querySelector('.price').textContent='$'+fmt(p.price);
+    card.querySelector('.change').className='change '+dir;card.querySelector('.change').textContent=sign+p.change.toFixed(2)+'%'}})}catch{}})}catch{}
+}
+
+async function init(){
+    await Promise.all([loadPrices(),loadMarketTable(),loadSentiment(),loadPortfolio(),loadAlerts(),loadFunding()]);
+    document.getElementById('status-text').textContent='Live';
+    connectSSE();
+    setInterval(()=>{loadPrices();loadMarketTable();loadPortfolio()},30000);
+    setInterval(loadSentiment,300000);
+}
+init();
+</script>
 </body>
 </html>
