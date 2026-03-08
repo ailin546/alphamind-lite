@@ -1,0 +1,30 @@
+{
+  "name": "alphamind-lite",
+  "version": "9.0.0",
+  "description": "AI-powered cryptocurrency investment assistant with real-time market analysis, portfolio management, and intelligent trading advice",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node scripts/demo.js",
+    "interactive": "node scripts/demo-interactive.js"
+  },
+  "keywords": [
+    "cryptocurrency",
+    "trading",
+    "ai",
+    "binance",
+    "portfolio",
+    "risk-management",
+    "market-analysis",
+    "bnb-chain"
+  ],
+  "author": "AlphaMind Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ailin546/alphamind-lite"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
