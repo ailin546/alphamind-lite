@@ -95,12 +95,26 @@ const showRiskAnalysis = () => {
   }
 };
 
-// 4. AI 总结
-const showAISummary = () => {
-  printHeader('🧠', 'AI 智能总结');
-  console.log('  📌 市场判断：主流币种今日波动正常');
-  console.log('  📌 持仓建议：示例仓位盈利中，建议适当止盈');
-  console.log('  📌 风险提示：保持止损纪律，避免过度杠杆');
+// 4. 市场总结 (基于真实数据)
+const showSummary = () => {
+  printHeader('🧠', '市场总结');
+  const coins = ['BTC', 'ETH', 'BNB', 'SOL'];
+  const changes = [];
+  for (const sym of coins) {
+    const data = run(`curl -s "https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}USDT"`);
+    if (!data) continue;
+    try { const j = JSON.parse(data); changes.push({ sym, pct: parseFloat(j.priceChangePercent) }); } catch {}
+  }
+  if (changes.length === 0) { console.log('  无法生成总结（数据不可用）'); return; }
+  const avg = changes.reduce((s, c) => s + c.pct, 0) / changes.length;
+  const best = changes.reduce((a, b) => a.pct > b.pct ? a : b);
+  const worst = changes.reduce((a, b) => a.pct < b.pct ? a : b);
+  const sentiment = avg > 3 ? '偏多头' : avg < -3 ? '偏空头' : '震荡中';
+  console.log(`  📌 市场情绪：${sentiment}（主流币均涨幅 ${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%）`);
+  console.log(`  📌 最强表现：${best.sym} ${best.pct >= 0 ? '+' : ''}${best.pct.toFixed(2)}%`);
+  console.log(`  📌 最弱表现：${worst.sym} ${worst.pct >= 0 ? '+' : ''}${worst.pct.toFixed(2)}%`);
+  if (Math.abs(avg) > 5) console.log('  ⚠️  波动较大，注意风险管理');
+  else console.log('  💡 波动正常，适合观望或定投');
 };
 
 // 主函数
@@ -112,7 +126,7 @@ const main = () => {
   showMarket();
   showFearGreed();
   showRiskAnalysis();
-  showAISummary();
+  showSummary();
   
   console.log('\n' + '═'.repeat(50));
   console.log('✅ 演示完成 | 让每个投资者都有机构级智慧');

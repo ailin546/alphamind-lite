@@ -98,6 +98,63 @@ test('api-client has all expected exports', () => {
   });
 });
 
+// ---- DB Tests ----
+console.log('\n📋 Database');
+test('db module loads', () => {
+  const db = require('./db');
+  assert.ok(db.load);
+  assert.ok(db.getPortfolio);
+  assert.ok(db.addHolding);
+  assert.ok(db.getAlerts);
+  assert.ok(db.addAlert);
+});
+
+test('db CRUD operations work', () => {
+  const db = require('./db');
+  // Portfolio
+  db.addHolding('TEST', 1.0, 100);
+  const portfolio = db.getPortfolio();
+  const holding = portfolio.find(p => p.symbol === 'TEST');
+  assert.ok(holding, 'Holding should exist');
+  assert.strictEqual(holding.amount, 1.0);
+  assert.strictEqual(holding.avgPrice, 100);
+
+  // Average in
+  db.addHolding('TEST', 1.0, 200);
+  const updated = db.getPortfolio().find(p => p.symbol === 'TEST');
+  assert.strictEqual(updated.amount, 2.0);
+  assert.strictEqual(updated.avgPrice, 150); // (1*100 + 1*200) / 2
+
+  // Remove
+  db.removeHolding('TEST');
+  assert.ok(!db.getPortfolio().find(p => p.symbol === 'TEST'));
+
+  // Alerts
+  const alert = db.addAlert('BTC', 80000, 'above');
+  assert.ok(alert.id);
+  assert.strictEqual(alert.symbol, 'BTC');
+  db.removeAlert(alert.id);
+  assert.ok(!db.getAlerts().find(a => a.id === alert.id));
+});
+
+test('db price history works', () => {
+  const db = require('./db');
+  db.recordPrice('BTC', 70000);
+  db.recordPrice('BTC', 71000);
+  const history = db.getPriceHistory('BTC');
+  assert.ok(history.length >= 2);
+  assert.strictEqual(history[history.length - 1].price, 71000);
+});
+
+// ---- Notify Module Tests ----
+console.log('\n📋 Notify');
+test('notify module loads', () => {
+  const notify = require('./notify');
+  assert.ok(notify.sendTelegram);
+  assert.ok(notify.sendPriceAlert);
+  assert.ok(notify.sendPortfolioSummary);
+});
+
 // ---- Script Syntax Tests ----
 console.log('\n📋 Script Syntax');
 const fs = require('fs');

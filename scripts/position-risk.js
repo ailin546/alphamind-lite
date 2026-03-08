@@ -154,19 +154,25 @@ function runCLI() {
   
   if (args.length >= 5) {
     const position = {
-      symbol: args[0],
+      symbol: args[0].toUpperCase(),
       quantity: parseFloat(args[1]),
       entryPrice: parseFloat(args[2]),
       currentPrice: parseFloat(args[3]),
       leverage: parseInt(args[4])
     };
-    
+
+    if (isNaN(position.quantity) || position.quantity <= 0) { console.log('❌ 数量必须为正数'); return; }
+    if (isNaN(position.entryPrice) || position.entryPrice <= 0) { console.log('❌ 开仓价必须为正数'); return; }
+    if (isNaN(position.currentPrice) || position.currentPrice <= 0) { console.log('❌ 当前价必须为正数'); return; }
+    if (isNaN(position.leverage) || position.leverage < 1 || position.leverage > 125) { console.log('❌ 杠杆倍数范围: 1-125'); return; }
+
     const result = calculatePositionRisk(position);
     printRiskReport(result);
     return result;
   }
-  
+
   console.log('⚠️  参数不足，运行示例测试...\n');
+  console.log('💡 使用 --help 查看完整用法\n');
   return runExample();
 }
 

@@ -1,68 +1,153 @@
 #!/usr/bin/env node
 /**
- * AlphaMind Lite - Whale Alert Simulation
- * 巨鲸（大户）活动监控模拟
+ * AlphaMind Lite - Whale Alert (Real On-Chain Data)
+ * 链上巨鲸活动监控 - 使用 Blockchain.com 公开 API 和 Binance 大单监控
  */
 
-const https = require('https');
+const { httpGet, fetchMarketData } = require('./api-client');
 
-// 模拟数据 - 真实需要链上API
-const WHALE_ADDRESSES = [
-  { label: '巨鲸A', address: '0x123...abc', balance: '12,500 BTC' },
-  { label: '巨鲸B', address: '0x456...def', balance: '8,200 ETH' },
-  { label: '机构C', address: '0x789...ghi', balance: '45,000 ETH' },
-];
+/**
+ * 获取 BTC 最新区块中的大额交易
+ * 使用 Blockchain.com 公开 API（无需 API key）
+ */
+async function fetchBTCLargeTransactions() {
+  try {
+    // 获取最新区块 hash
+    const latestBlock = await httpGet('https://blockchain.info/latestblock', { timeout: 10000, retries: 2 });
+    const blockHash = latestBlock.hash;
 
-function getMarketData() {
-  return new Promise((resolve) => {
-    const req = https.request({
-      hostname: 'api.binance.com',
-      path: '/api/v3/ticker/24hr?symbol=BTCUSDT',
-      method: 'GET'
-    }, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { resolve(null); }
-      });
-    });
-    req.end();
-  });
+    // 获取区块详情（只取前几笔大交易）
+    const block = await httpGet(`https://blockchain.info/rawblock/${blockHash}?limit=20`, { timeout: 15000, retries: 2 });
+
+    const largeTxs = [];
+    const BTC_TO_SAT = 100000000;
+    const MIN_BTC = 100; // 只显示 >= 100 BTC 的交易
+
+    for (const tx of (block.tx || []).slice(0, 50)) {
+      let totalOutput = 0;
+      for (const out of tx.out || []) {
+        totalOutput += out.value || 0;
+      }
+      const btcAmount = totalOutput / BTC_TO_SAT;
+      if (btcAmount >= MIN_BTC) {
+        largeTxs.push({
+          hash: tx.hash.slice(0, 16) + '...',
+          btc: btcAmount,
+          outputs: tx.out?.length || 0,
+          time: tx.time ? new Date(tx.time * 1000).toLocaleString() : 'Unknown',
+        });
+      }
+    }
+
+    return { blockHeight: block.height, blockHash: blockHash.slice(0, 16) + '...', transactions: largeTxs.slice(0, 10) };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+/**
+ * 获取 Binance 最近大额成交（使用 aggTrades 接口）
+ */
+async function fetchBinanceLargeTrades(symbol = 'BTCUSDT', minUSD = 500000) {
+  try {
+    const trades = await httpGet(
+      `https://api.binance.com/api/v3/aggTrades?symbol=${symbol}&limit=100`,
+      { timeout: 10000, retries: 2 }
+    );
+
+    const largeTrades = [];
+    for (const t of trades) {
+      const price = parseFloat(t.p);
+      const qty = parseFloat(t.q);
+      const usdValue = price * qty;
+      if (usdValue >= minUSD) {
+        largeTrades.push({
+          price,
+          qty,
+          usd: usdValue,
+          side: t.m ? 'SELL' : 'BUY', // m=true means buyer is maker (seller initiated)
+          time: new Date(t.T).toLocaleTimeString(),
+        });
+      }
+    }
+
+    return largeTrades;
+  } catch (err) {
+    return [];
+  }
 }
 
 async function main() {
   console.log('═══════════════════════════════════════════════════════════');
-  console.log('   🐋 AlphaMind - 巨鲸活动监控');
+  console.log('   🐋 AlphaMind - 巨鲸活动监控 (Real Data)');
   console.log('═══════════════════════════════════════════════════════════\n');
-  
-  console.log('📊 当前市场数据:');
-  const market = await getMarketData();
+
+  // Fetch all data in parallel
+  const [market, largeTrades, onchain] = await Promise.all([
+    fetchMarketData('BTCUSDT').catch(() => null),
+    fetchBinanceLargeTrades('BTCUSDT', 500000),
+    fetchBTCLargeTransactions(),
+  ]);
+
+  // 1. Market overview
+  console.log('📊 当前市场:');
   if (market) {
     const emoji = parseFloat(market.priceChangePercent) >= 0 ? '🟢' : '🔴';
-    console.log(`  BTC 价格: $${parseFloat(market.lastPrice).toLocaleString()} ${emoji} ${parseFloat(market.priceChangePercent).toFixed(2)}%`);
-    console.log(`  24h 成交量: $${(parseFloat(market.quoteVolume)/1e9).toFixed(2)}B`);
-    console.log(`  最高: $${parseFloat(market.highPrice).toLocaleString()}`);
-    console.log(`  最低: $${parseFloat(market.lowPrice).toLocaleString()}`);
+    console.log(`  BTC: $${parseFloat(market.lastPrice).toLocaleString()} ${emoji} ${parseFloat(market.priceChangePercent).toFixed(2)}%`);
+    console.log(`  24h 成交量: $${(parseFloat(market.quoteVolume) / 1e9).toFixed(2)}B`);
+  } else {
+    console.log('  ⚠️ 无法获取市场数据');
   }
-  
-  console.log('\n🐋 巨鲸地址监控 (模拟数据):');
-  WHALE_ADDRESSES.forEach(w => {
-    console.log(`  • ${w.label}: ${w.balance}`);
-  });
-  
-  console.log('\n📝 巨鲸活动说明:');
-  console.log('  ⚠️ 注意: 以上为模拟数据');
-  console.log('  • 真实巨鲸追踪需要链上API (如 Glassnode, Chainalysis)');
-  console.log('  • 大户转账通常被视为市场信号');
-  console.log('  • 但不应作为唯一投资依据');
-  
-  console.log('\n💡 建议:');
-  console.log('  • 关注巨鲸地址变化');
-  console.log('  • 结合恐慌指数判断');
-  console.log('  • 设置合理的止盈止损');
-  
+
+  // 2. Binance large trades
+  console.log('\n🔥 Binance 近期大额成交 (>$500K):');
+  console.log('  ' + '─'.repeat(55));
+
+  if (largeTrades.length > 0) {
+    let buyVol = 0, sellVol = 0;
+    for (const t of largeTrades.slice(0, 10)) {
+      const emoji = t.side === 'BUY' ? '🟢' : '🔴';
+      console.log(`  ${emoji} ${t.side.padEnd(4)} ${t.qty.toFixed(4)} BTC @ $${t.price.toLocaleString()} = $${(t.usd / 1000).toFixed(0)}K  [${t.time}]`);
+      if (t.side === 'BUY') buyVol += t.usd; else sellVol += t.usd;
+    }
+    console.log('  ' + '─'.repeat(55));
+    const total = buyVol + sellVol;
+    const buyRatio = total > 0 ? ((buyVol / total) * 100).toFixed(1) : '0';
+    const sellRatio = total > 0 ? ((sellVol / total) * 100).toFixed(1) : '0';
+    console.log(`  大单买入: $${(buyVol / 1e6).toFixed(2)}M (${buyRatio}%)  |  大单卖出: $${(sellVol / 1e6).toFixed(2)}M (${sellRatio}%)`);
+
+    if (buyVol > sellVol * 1.5) console.log('  📈 大单买入压力明显，多头占优');
+    else if (sellVol > buyVol * 1.5) console.log('  📉 大单卖出压力明显，空头占优');
+    else console.log('  ⚖️ 多空力量均衡');
+  } else {
+    console.log('  暂无大额成交记录');
+  }
+
+  // 3. BTC on-chain large transactions
+  console.log('\n⛓️  BTC 链上大额转账 (最新区块, ≥100 BTC):');
+  console.log('  ' + '─'.repeat(55));
+  if (onchain.error) {
+    console.log(`  ⚠️ 链上数据获取失败: ${onchain.error}`);
+    console.log('  (Blockchain.com API 可能受区域限制)');
+  } else {
+    console.log(`  区块高度: #${onchain.blockHeight}  Hash: ${onchain.blockHash}`);
+    if (onchain.transactions.length > 0) {
+      for (const tx of onchain.transactions) {
+        const emoji = tx.btc >= 1000 ? '🐋' : tx.btc >= 500 ? '🦈' : '🐟';
+        console.log(`  ${emoji} ${tx.btc.toFixed(2)} BTC  |  Tx: ${tx.hash}  |  ${tx.time}`);
+      }
+    } else {
+      console.log('  该区块内暂无 ≥100 BTC 的大额交易');
+    }
+  }
+
+  console.log('\n💡 解读:');
+  console.log('  • 🐋 ≥1000 BTC: 超级巨鲸   🦈 ≥500 BTC: 大户   🐟 ≥100 BTC: 中型玩家');
+  console.log('  • 大量链上转入交易所 → 可能抛售信号');
+  console.log('  • 大量从交易所转出   → 可能囤积信号');
+  console.log('  • Binance 大单买卖比可反映即时市场情绪');
+
   console.log('\n═══════════════════════════════════════════════════════════');
 }
 
-main();
+main().catch(console.error);
