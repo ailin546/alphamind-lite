@@ -1,247 +1,264 @@
-# AlphaMind Lite 🦞
+# AlphaMind Lite
 
+> **AI-Powered Cryptocurrency Investment Assistant**
+>
 > **简体中文** | [English](#english-version)
 
 ---
 
-## 📖 项目简介
+## 项目简介
 
-AlphaMind Lite 是一个开源的加密货币投资助手，基于 AI 技术帮助普通投资者做出更好的交易决策。
+AlphaMind Lite 是一个**零依赖**的开源加密货币智能投资助手。通过一个直观的 Web Dashboard，普通用户无需任何代码知识，即可获得机构级别的市场分析、持仓管理和风险控制能力。
 
-### 核心理念
-- **让 AI 成为你的交易伙伴**
-- **7×24 小时不间断监控**
-- **中文本地化**，更懂中国投资者
-
-### 适用人群
-- 加密货币新手投资者
-- 忙碌的上班族（没时间看盘）
-- 想要智能工具的投资者
-- 关注风险控制的用户
+**核心特点：**
+- **零代码操作** - 纯 Web 界面，打开浏览器即可使用
+- **零依赖部署** - 纯 Node.js，无需安装任何 npm 包
+- **实时数据** - 直接对接 Binance API，毫秒级行情更新
+- **AI 智能分析** - 内置 AI 交易助手，自然语言交互
+- **7x24 监控** - 自动刷新，永不错过市场变化
 
 ---
 
-## ✨ 核心功能
-
-| 功能 | 说明 |
-|------|------|
-| 📊 实时行情 | 毫秒级拉取 Binance 主流币种价格 |
-| 🎯 恐慌指数 | Fear & Greed Index + AI 分析 |
-| 💼 持仓分析 | 多币种盈亏智能计算 |
-| 📡 情报雷达 | 7×24 小时监控公告新闻 |
-| 🛡️ 风控预警 | 实时仓位健康检测 |
-| 🔔 价格提醒 | 自定义阈值 Telegram 推送 |
-
----
-
-## 🚀 快速开始
+## 快速开始
 
 ```bash
-# 克隆项目
+# 1. 克隆项目
 git clone https://github.com/ailin546/alphamind-lite.git
 cd alphamind-lite
 
-# 运行演示
-node scripts/demo.js
+# 2. 启动服务（无需 npm install）
+node server.js
+
+# 3. 打开浏览器访问
+# http://localhost:3000
 ```
+
+就这么简单！无需配置，无需安装依赖。
 
 ---
 
-## 📁 项目结构
+## 功能展示
+
+### Dashboard - 一站式市场概览
+- BTC/ETH 实时价格与涨跌
+- Fear & Greed 恐慌贪婪指数
+- 综合市场信号（买入/持有/卖出）
+- 24小时价格走势图
+- 恐慌指数30天历史
+
+### Market Data - 多币种行情
+- 12+ 主流币种实时价格
+- K线图表（1H/4H/1D 时间周期）
+- 24h 成交量、最高/最低价
+- 一键切换币种
+
+### Portfolio Manager - 持仓管理
+- 可视化添加/删除持仓
+- 实时盈亏计算（金额 + 百分比）
+- 资产分配饼图
+- AI 投资建议
+- 本地存储，数据不丢失
+
+### Market Sentiment - 情绪分析
+- Fear & Greed 指数仪表盘
+- BTC 趋势分析
+- 综合买卖信号
+- 多币种与 BTC 相关性分析
+- 30天情绪趋势图
+
+### Risk Control - 风控中心
+- 杠杆仓位风险计算器
+- 爆仓价格预警
+- 风险评级（安全/警告/危险）
+- 价格提醒配置
+
+### Tools - 投资工具
+- 定投(DCA)收益计算器
+- 盈亏计算器
+
+### AI Chat - 智能对话
+- 自然语言问答
+- 基于实时数据的市场分析
+- 买卖建议
+- 风险评估
+- 预设快捷问题
+
+---
+
+## 技术架构
+
+```
+                    +-------------------+
+                    |   Web Dashboard   |  (dashboard.html)
+                    |   Pure HTML/CSS/JS |
+                    +--------+----------+
+                             |
+                    +--------v----------+
+                    |   Node.js Server  |  (server.js)
+                    |   REST API Layer  |
+                    +--------+----------+
+                             |
+            +----------------+----------------+
+            |                |                |
+    +-------v------+  +-----v-------+  +-----v-------+
+    | Binance API  |  | Fear/Greed  |  | AI Engine   |
+    | Market Data  |  | Sentiment   |  | Analysis    |
+    +--------------+  +-------------+  +-------------+
+```
+
+**零依赖设计** - 仅使用 Node.js 内置模块（http, https, fs, path, url），无需任何第三方包。
+
+### API 端点
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/market` | 实时行情（支持多币种） |
+| GET | `/api/fear-greed` | 恐慌贪婪指数 + 30天历史 |
+| GET | `/api/sentiment` | 综合市场情绪分析 |
+| GET | `/api/correlation` | 币种相关性分析 |
+| GET | `/api/klines` | K线图表数据 |
+| POST | `/api/portfolio` | 持仓分析 |
+| POST | `/api/risk` | 仓位风险计算 |
+| POST | `/api/dca` | 定投收益计算 |
+| POST | `/api/ai-chat` | AI 智能对话 |
+
+---
+
+## 项目结构
 
 ```
 alphamind-lite/
-├── README.md              # 本文件
-├── README-en.md          # English version
-├── deploy.sh            # 一键部署
-├── scripts/             # 功能脚本 (18个)
-│   ├── demo.js         # 完整演示
-│   ├── portfolio.js    # 持仓分析
-│   ├── fear-greed.js  # 恐慌指数
+├── server.js          # Web 服务器 + REST API (核心)
+├── dashboard.html     # 交互式 Web Dashboard (前端)
+├── package.json       # 项目配置
+├── index.html         # 项目展示页
+├── deploy.sh          # 一键部署脚本
+├── scripts/           # CLI 工具脚本 (19个)
+│   ├── demo.js               # 快速演示
+│   ├── demo-interactive.js   # 交互式菜单
+│   ├── portfolio.js          # 持仓分析
+│   ├── fear-greed.js         # 恐慌指数
+│   ├── market-sentiment.js   # 情绪分析
+│   ├── position-risk.js      # 风险计算
+│   ├── price-watcher.js      # 价格监控
+│   ├── alerts.js             # 价格提醒
+│   ├── market-correlation.js # 相关性分析
+│   ├── arbitrage.js          # 套利扫描
+│   ├── dca-calculator.js     # 定投计算
+│   ├── whale-alert.js        # 巨鲸监控
+│   ├── ai-chat.js            # AI 对话
 │   └── ...
-└── docs/               # 文档 (18个)
-    ├── product-spec.md
-    ├── business-plan.md
+└── docs/              # 完整文档 (18个)
+    ├── product-spec.md       # 产品规格
+    ├── tech-architecture.md  # 技术架构
+    ├── business-plan.md      # 商业计划
+    ├── roadmap.md            # 产品路线图
     └── ...
 ```
 
 ---
 
-## ⚙️ 配置说明
+## 商业模式
 
-### 持仓配置
-编辑 `scripts/portfolio.js`:
-```javascript
-const PORTFOLIO = [
-  { symbol: 'BTC', amount: 0.5, avgPrice: 70000 },
-  { symbol: 'ETH', amount: 2.0, avgPrice: 2000 },
-];
-```
-
-### AI 对话配置
-编辑 `scripts/user-ai-chat.js`，填入你的 API Key。
+1. **免费基础版** - 开源社区版，所有核心功能免费
+2. **高级订阅** - 高级AI分析、多交易所支持、实时推送
+3. **API 服务** - 为其他应用提供数据分析接口
+4. **策略市场** - 用户分享交易策略的平台
 
 ---
 
-## ❓ 常见问题
+## 路线图
 
-详见 [docs/faq.md](docs/faq.md)
+- [x] Phase 1: MVP - 核心功能 + CLI 工具
+- [x] Phase 2: Web Dashboard - 零代码交互界面
+- [x] Phase 3: AI 智能分析 - 自然语言交互
+- [ ] Phase 4: 多交易所支持
+- [ ] Phase 5: 社交功能 + 策略市场
 
 ---
 
-## 🤝 贡献指南
+## 贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎 Issue 和 Pull Request！
 
 ```bash
 git clone https://github.com/ailin546/alphamind-lite.git
 git checkout -b feature/your-feature
 git commit -m "Add: your feature"
-git push origin main
+git push origin feature/your-feature
 ```
 
 ---
 
-## 📄 许可证
+## License
 
 MIT License
-
----
-
-## 🔗 相关链接
-
-- 📖 [产品文档](docs/product-spec.md)
-- 📊 [商业计划](docs/business-plan.md)
-- 🗺️ [路线图](docs/roadmap.md)
-
----
-
-**让 AI 成为你的交易伙伴** 💪
-
-© 2026 AlphaMind Lite
 
 ---
 
 <a name="english-version"></a>
 
-# AlphaMind Lite 🦞
+# AlphaMind Lite (English)
 
-> **中文** | [English](#english-version)
+> **AI-Powered Cryptocurrency Investment Assistant**
 
----
+## Overview
 
-## 📖 Overview
+AlphaMind Lite is a **zero-dependency** open-source AI cryptocurrency investment assistant. Through an intuitive Web Dashboard, ordinary users can access institutional-grade market analysis, portfolio management, and risk control without any coding knowledge.
 
-AlphaMind Lite is an open-source cryptocurrency investment assistant that helps ordinary investors make better trading decisions through AI technology.
+**Key Features:**
+- **Zero Code** - Pure web interface, just open your browser
+- **Zero Dependencies** - Pure Node.js, no npm packages needed
+- **Real-time Data** - Direct Binance API integration
+- **AI Analysis** - Built-in AI trading assistant with natural language
+- **24/7 Monitoring** - Auto-refresh, never miss market changes
 
-### Core Philosophy
-- **Let AI be your trading partner**
-- **7×24 hours uninterrupted monitoring**
-- **Chinese localization** - Better for Chinese investors
+## Quick Start
 
-### Target Users
-- New cryptocurrency investors
-- Busy office workers (no time to watch markets)
-- Investors seeking intelligent tools
-- Users focused on risk management
+```bash
+git clone https://github.com/ailin546/alphamind-lite.git
+cd alphamind-lite
+node server.js
+# Open http://localhost:3000
+```
 
----
-
-## ✨ Core Features
+## Features
 
 | Feature | Description |
 |---------|-------------|
-| 📊 Real-time Market | Millisecond-level Binance price fetching |
-| 🎯 Fear & Greed Index | Fear & Greed Index + AI analysis |
-| 💼 Portfolio Analysis | Multi-coin P&L calculation |
-| 📡 News Radar | 7×24h monitoring of announcements |
-| 🛡️ Risk Alerts | Real-time position health detection |
-| 🔔 Price Alerts | Custom threshold Telegram notifications |
+| Dashboard | One-stop market overview with live charts |
+| Market Data | 12+ coins with K-line charts (1H/4H/1D) |
+| Portfolio | Visual portfolio management with P&L tracking |
+| Sentiment | Fear & Greed Index + correlation analysis |
+| Risk Control | Leverage risk calculator + price alerts |
+| Tools | DCA calculator + P&L calculator |
+| AI Chat | Natural language trading assistant |
 
----
+## Architecture
 
-## 🚀 Quick Start
+- **Frontend**: Pure HTML/CSS/JS (no framework, no build step)
+- **Backend**: Native Node.js HTTP server (zero npm dependencies)
+- **Data**: Binance REST API + Fear & Greed API
+- **AI**: Context-aware analysis engine with market data integration
 
-```bash
-# Clone project
-git clone https://github.com/ailin546/alphamind-lite.git
-cd alphamind-lite
+## API Endpoints
 
-# Run demo
-node scripts/demo.js
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/market` | Real-time market data |
+| GET | `/api/fear-greed` | Fear & Greed Index |
+| GET | `/api/sentiment` | Comprehensive sentiment |
+| GET | `/api/correlation` | Correlation analysis |
+| GET | `/api/klines` | K-line chart data |
+| POST | `/api/portfolio` | Portfolio analysis |
+| POST | `/api/risk` | Position risk calculation |
+| POST | `/api/dca` | DCA calculation |
+| POST | `/api/ai-chat` | AI chat |
 
----
-
-## 📁 Project Structure
-
-```
-alphamind-lite/
-├── README.md              # This file (Chinese)
-├── README-en.md          # English version
-├── deploy.sh            # One-click deploy
-├── scripts/             # Function scripts (18)
-│   ├── demo.js         # Full demo
-│   ├── portfolio.js    # Portfolio analysis
-│   ├── fear-greed.js  # Fear index
-│   └── ...
-└── docs/               # Documentation (18)
-    ├── product-spec.md
-    ├── business-plan.md
-    └── ...
-```
-
----
-
-## ⚙️ Configuration
-
-### Portfolio
-Edit `scripts/portfolio.js`:
-```javascript
-const PORTFOLIO = [
-  { symbol: 'BTC', amount: 0.5, avgPrice: 70000 },
-  { symbol: 'ETH', amount: 2.0, avgPrice: 2000 },
-];
-```
-
-### AI Chat
-Edit `scripts/user-ai-chat.js`, add your API key.
-
----
-
-## ❓ FAQ
-
-See [docs/faq-en.md](docs/faq-en.md)
-
----
-
-## 🤝 Contributing
-
-Welcome to submit Issues and Pull Requests!
-
-```bash
-git clone https://github.com/ailin546/alphamind-lite.git
-git checkout -b feature/your-feature
-git commit -m "Add: your feature"
-git push origin main
-```
-
----
-
-## 📄 License
+## License
 
 MIT License
 
----
+**Let AI be your trading partner**
 
-## 🔗 Links
-
-- 📖 [Product Spec](docs/product-spec.md)
-- 📊 [Business Plan](docs/business-plan.md)
-- 🗺️ [Roadmap](docs/roadmap.md)
-
----
-
-**Let AI be your trading partner** 💪
-
-© 2026 AlphaMind Lite
+(c) 2026 AlphaMind Lite
