@@ -1035,6 +1035,54 @@ async function handleIndicators(req, res) {
   }
 }
 
+// ---- Multi-Timeframe Analysis API ----
+async function handleMultiTimeframe(req, res) {
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const symbol = (url.searchParams.get('symbol') || 'BTC').toUpperCase();
+    if (!/^[A-Z0-9]{2,10}$/.test(symbol)) return sendJSON(res, 400, { error: 'Invalid symbol' });
+
+    const cacheKey = `mtf:${symbol}`;
+    const cached = getCached(cacheKey);
+    if (cached) return sendJSON(res, 200, cached);
+
+    const [k1h, k4h, k1d] = await Promise.all([
+      fetchKlines(`${symbol}USDT`, '1h', 50),
+      fetchKlines(`${symbol}USDT`, '4h', 50),
+      fetchKlines(`${symbol}USDT`, '1d', 50),
+    ]);
+
+    const tf1h = calculateIndicators(k1h);
+    const tf4h = calculateIndicators(k4h);
+    const tf1d = calculateIndicators(k1d);
+
+    // Confluence score: how many timeframes agree
+    const signals = [tf1h?.signal, tf4h?.signal, tf1d?.signal].filter(Boolean);
+    const buyCount = signals.filter(s => s === 'buy').length;
+    const sellCount = signals.filter(s => s === 'sell').length;
+
+    let confluence = 'mixed';
+    if (buyCount >= 2) confluence = 'bullish';
+    else if (sellCount >= 2) confluence = 'bearish';
+
+    const response = {
+      ok: true, symbol,
+      timeframes: {
+        '1h': tf1h ? { signal: tf1h.signal, rsi: tf1h.rsi, strength: tf1h.strength } : null,
+        '4h': tf4h ? { signal: tf4h.signal, rsi: tf4h.rsi, strength: tf4h.strength } : null,
+        '1d': tf1d ? { signal: tf1d.signal, rsi: tf1d.rsi, strength: tf1d.strength } : null,
+      },
+      confluence,
+      summary: `${symbol} multi-timeframe: 1H=${tf1h?.signal || 'N/A'}, 4H=${tf4h?.signal || 'N/A'}, 1D=${tf1d?.signal || 'N/A'} → ${confluence.toUpperCase()}`,
+    };
+    setCache(cacheKey, response, 30000);
+    sendJSON(res, 200, response);
+  } catch (err) {
+    log.error('Multi-timeframe error', { error: err.message });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', confluence: 'mixed' });
+  }
+}
+
 // ---- Get Latest Prices API (for offline/demo mode) ----
 function handleLatestPrices(req, res) {
   if (Object.keys(_lastPrices).length === 0) {
@@ -1091,6 +1139,7 @@ const routes = {
   'POST /api/ai-chat': handleAIChat,
   'GET /api/bsc': handleBSCData,
   'GET /api/indicators': handleIndicators,
+  'GET /api/multi-timeframe': handleMultiTimeframe,
   'GET /api/prices': handleLatestPrices,
   'GET /api/stream': handleSSE,
   'GET /metrics': handleMetrics,
