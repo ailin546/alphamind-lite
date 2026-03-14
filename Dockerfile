@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Copy package files first for layer caching
 COPY package*.json ./
-RUN npm ci --omit=dev 2>/dev/null || true
+RUN npm ci --omit=dev || echo "No dependencies to install"
 
 # Copy application source
 COPY . .

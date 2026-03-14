@@ -13,7 +13,7 @@ module.exports = {
     {
       name: 'alphamind-server',
       script: 'scripts/server.js',
-      instances: 'max',         // cluster mode: one per CPU core
+      instances: process.env.PM2_INSTANCES || 2,  // use fixed count inside Docker containers
       exec_mode: 'cluster',
       autorestart: true,
       watch: false,

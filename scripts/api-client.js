@@ -124,7 +124,12 @@ async function fetchFundingRates(symbol = 'BTCUSDT') {
  * Fetch klines (candlestick) data
  */
 async function fetchKlines(symbol = 'BTCUSDT', interval = '1h', limit = 24) {
-  const url = `${config.apis.binance.rest}/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+  // Validate interval against known values
+  const VALID_INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'];
+  if (!VALID_INTERVALS.includes(interval)) throw new Error(`Invalid interval: ${interval}`);
+  // Validate symbol (alphanumeric only)
+  if (!/^[A-Z0-9]{2,20}$/i.test(symbol)) throw new Error(`Invalid symbol: ${symbol}`);
+  const url = `${config.apis.binance.rest}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${Math.min(limit, 1000)}`;
   return httpGet(url, { timeout: config.apis.binance.timeout });
 }
 

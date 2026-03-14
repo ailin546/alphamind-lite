@@ -120,7 +120,7 @@ function getAlerts() {
 
 function addAlert(symbol, price, direction) {
   const db = load();
-  const id = Date.now().toString(36);
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const alert = {
     id,
     symbol: symbol.toUpperCase(),

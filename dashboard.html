@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AlphaMind Lite | AI Crypto Trading Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0b0e17;
@@ -873,13 +873,16 @@ Ask me anything about cryptocurrency markets, for example:
 
     // ─── API Helper ──────────────────────────────────────────────────────────
     async function api(endpoint, opts = {}) {
-      const url = endpoint.startsWith('http') ? endpoint : endpoint;
       const fetchOpts = { headers: { 'Content-Type': 'application/json' } };
       if (opts.body) {
         fetchOpts.method = 'POST';
         fetchOpts.body = JSON.stringify(opts.body);
       }
-      const res = await fetch(url, fetchOpts);
+      const res = await fetch(endpoint, fetchOpts);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+      }
       return res.json();
     }
 
@@ -1177,7 +1180,7 @@ Ask me anything about cryptocurrency markets, for example:
       // Advice
       const advEl = document.getElementById('pf-advice');
       advEl.style.display = 'block';
-      advEl.innerHTML = `<strong>AI Advice:</strong> ${result.advice}<br><small>BTC allocation: ${fmt(result.btcRatio, 1)}% | Diversification: ${result.diversification}</small>`;
+      advEl.innerHTML = `<strong>AI Advice:</strong> ${escapeHtml(result.advice)}<br><small>BTC allocation: ${fmt(result.btcRatio, 1)}% | Diversification: ${escapeHtml(result.diversification)}</small>`;
 
       // Pie chart
       document.getElementById('pf-chart-card').style.display = 'block';
@@ -1199,11 +1202,14 @@ Ask me anything about cryptocurrency markets, for example:
 
     // ─── Sentiment ───────────────────────────────────────────────────────────
     async function loadSentiment() {
-      const [fg, sentiment, corr] = await Promise.all([
-        api('/api/fear-greed'),
-        api('/api/sentiment'),
-        api('/api/correlation'),
-      ]);
+      let fg = {}, sentiment = {}, corr = {};
+      try {
+        [fg, sentiment, corr] = await Promise.all([
+          api('/api/fear-greed').catch(() => ({})),
+          api('/api/sentiment').catch(() => ({})),
+          api('/api/correlation').catch(() => ({})),
+        ]);
+      } catch (e) { console.error('Sentiment error:', e); return; }
 
       // Fear gauge
       if (fg.value != null) {
@@ -1255,7 +1261,7 @@ Ask me anything about cryptocurrency markets, for example:
             <strong class="${sentiment.btcTrend === 'up' ? 'up' : 'down'}">${sentiment.btcTrend === 'up' ? 'Uptrend' : 'Downtrend'}</strong>
             ${sentiment.btcPrice ? `<br><small>Price: $${fmt(sentiment.btcPrice)} | Avg: $${fmt(sentiment.btcAvg)}</small>` : ''}
           </div>
-          <div class="advice-box">${sentiment.analysis}</div>
+          <div class="advice-box">${escapeHtml(sentiment.analysis || '')}</div>
         `;
       }
 
@@ -1282,7 +1288,7 @@ Ask me anything about cryptocurrency markets, for example:
       const leverage = parseInt(document.getElementById('risk-leverage').value);
 
       const r = await api('/api/risk', { body: { symbol, quantity, entryPrice, leverage } });
-      if (r.error) { document.getElementById('risk-result').innerHTML = `<div class="loading">${r.error}</div>`; return; }
+      if (r.error) { document.getElementById('risk-result').innerHTML = `<div class="loading">${escapeHtml(r.error)}</div>`; return; }
 
       const riskColors = { safe: 'risk-safe', warning: 'risk-warning', danger: 'risk-danger', liquidated: 'risk-danger' };
       const riskLabels = { safe: 'Safe', warning: 'Warning', danger: 'Danger!', liquidated: 'LIQUIDATED!' };
@@ -1351,7 +1357,7 @@ Ask me anything about cryptocurrency markets, for example:
       const months = parseInt(document.getElementById('dca-months').value);
 
       const r = await api('/api/dca', { body: { symbol, monthlyAmount, months } });
-      if (r.error) { document.getElementById('dca-result').innerHTML = `<p>${r.error}</p>`; return; }
+      if (r.error) { document.getElementById('dca-result').innerHTML = `<p>${escapeHtml(r.error)}</p>`; return; }
 
       const profitCls = r.profit >= 0 ? 'up' : 'down';
       document.getElementById('dca-result').innerHTML = `
@@ -1390,26 +1396,30 @@ Ask me anything about cryptocurrency markets, for example:
     }
 
     // ─── AI Chat ─────────────────────────────────────────────────────────────
+    let _chatSending = false;
     async function sendChat() {
+      if (_chatSending) return;
       const input = document.getElementById('chat-input');
       const msg = input.value.trim();
       if (!msg) return;
       input.value = '';
+      _chatSending = true;
 
       const messagesEl = document.getElementById('chat-messages');
-      messagesEl.innerHTML += `<div class="chat-msg user">${escapeHtml(msg)}</div>`;
-      messagesEl.innerHTML += `<div class="chat-msg ai" id="chat-loading"><div class="spinner" style="display:inline-block;width:16px;height:16px;margin-right:8px;vertical-align:middle"></div>Thinking...</div>`;
+      messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg user">${escapeHtml(msg)}</div>`);
+      messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg ai" id="chat-loading"><div class="spinner" style="display:inline-block;width:16px;height:16px;margin-right:8px;vertical-align:middle"></div>Thinking...</div>`);
       messagesEl.scrollTop = messagesEl.scrollHeight;
 
       try {
         const r = await api('/api/ai-chat', { body: { message: msg } });
-        document.getElementById('chat-loading').remove();
-        messagesEl.innerHTML += `<div class="chat-msg ai">${escapeHtml(r.reply)}</div>`;
+        document.getElementById('chat-loading')?.remove();
+        messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg ai">${escapeHtml(r.reply)}</div>`);
       } catch (e) {
-        document.getElementById('chat-loading').remove();
-        messagesEl.innerHTML += `<div class="chat-msg ai" style="border-color:var(--accent)">Sorry, an error occurred. Please try again.</div>`;
+        document.getElementById('chat-loading')?.remove();
+        messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg ai" style="border-color:var(--accent)">Sorry, an error occurred. Please try again.</div>`);
       }
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      _chatSending = false;
     }
 
     function sendQuick(msg) {
@@ -1418,7 +1428,9 @@ Ask me anything about cryptocurrency markets, for example:
     }
 
     function escapeHtml(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      if (!s) return '';
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>');
     }
 
     // ─── Init ────────────────────────────────────────────────────────────────
