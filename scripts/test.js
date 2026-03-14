@@ -23,16 +23,19 @@ function test(name, fn) {
   }
 }
 
-async function testAsync(name, fn) {
-  try {
-    await fn();
-    passed++;
-    console.log(`  ✓ ${name}`);
-  } catch (err) {
-    failed++;
-    errors.push({ name, error: err.message });
-    console.log(`  ✗ ${name}: ${err.message}`);
-  }
+const asyncTests = [];
+function testAsync(name, fn) {
+  asyncTests.push(async () => {
+    try {
+      await fn();
+      passed++;
+      console.log(`  ✓ ${name}`);
+    } catch (err) {
+      failed++;
+      errors.push({ name, error: err.message });
+      console.log(`  ✗ ${name}: ${err.message}`);
+    }
+  });
 }
 
 // ==========================================
@@ -376,6 +379,152 @@ test('escapeHtml prevents XSS', () => {
   assert.strictEqual(escapeHtml("it's"), "it&#039;s");
 });
 
+// ---- HTTP Integration Tests ----
+console.log('\n📋 HTTP Integration');
+
+testAsync('server starts and responds to /health', async () => {
+  const http = require('http');
+  const { execSync, spawn } = require('child_process');
+
+  // Start server on a random port
+  const testPort = 39123;
+  const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error' };
+  const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
+
+  // Wait for server to start
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    const data = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${testPort}/health`, res => {
+        let body = '';
+        res.on('data', c => body += c);
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        });
+      }).on('error', reject);
+    });
+
+    assert.strictEqual(data.status, 'ok', 'Health status should be ok');
+    assert.ok(data.version, 'Health should include version');
+    assert.ok(data.uptime >= 0, 'Health should include uptime');
+    assert.ok(data.timestamp, 'Health should include timestamp');
+  } finally {
+    server.kill('SIGTERM');
+    await new Promise(r => setTimeout(r, 500));
+  }
+});
+
+testAsync('server returns 404 for unknown routes', async () => {
+  const http = require('http');
+  const { spawn } = require('child_process');
+
+  const testPort = 39124;
+  const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error' };
+  const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    const statusCode = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${testPort}/nonexistent.html`, res => {
+        res.resume();
+        resolve(res.statusCode);
+      }).on('error', reject);
+    });
+    assert.strictEqual(statusCode, 404, 'Unknown route should return 404');
+  } finally {
+    server.kill('SIGTERM');
+    await new Promise(r => setTimeout(r, 500));
+  }
+});
+
+testAsync('server blocks access to sensitive paths', async () => {
+  const http = require('http');
+  const { spawn } = require('child_process');
+
+  const testPort = 39125;
+  const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error' };
+  const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    for (const sensitivePath of ['/config/config.js', '/scripts/server.js', '/.env', '/package.json']) {
+      const statusCode = await new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${testPort}${sensitivePath}`, res => {
+          res.resume();
+          resolve(res.statusCode);
+        }).on('error', reject);
+      });
+      assert.strictEqual(statusCode, 404, `${sensitivePath} should be blocked (got ${statusCode})`);
+    }
+  } finally {
+    server.kill('SIGTERM');
+    await new Promise(r => setTimeout(r, 500));
+  }
+});
+
+testAsync('server returns proper security headers', async () => {
+  const http = require('http');
+  const { spawn } = require('child_process');
+
+  const testPort = 39126;
+  const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error' };
+  const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    const headers = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${testPort}/health`, res => {
+        res.resume();
+        resolve(res.headers);
+      }).on('error', reject);
+    });
+
+    assert.ok(headers['x-content-type-options'] === 'nosniff', 'Should have X-Content-Type-Options');
+    assert.ok(headers['x-frame-options'] === 'DENY', 'Should have X-Frame-Options');
+    assert.ok(headers['x-request-id'], 'Should have X-Request-ID');
+    assert.ok(headers['content-security-policy'], 'Should have CSP header');
+  } finally {
+    server.kill('SIGTERM');
+    await new Promise(r => setTimeout(r, 500));
+  }
+});
+
+testAsync('server rate limiting works', async () => {
+  const http = require('http');
+  const { spawn } = require('child_process');
+
+  const testPort = 39127;
+  const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error', RATE_LIMIT_MAX: '5', RATE_LIMIT_WINDOW: '60000' };
+  const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    // Send 6 requests (max is 5)
+    const results = [];
+    for (let i = 0; i < 7; i++) {
+      const statusCode = await new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${testPort}/health`, res => {
+          res.resume();
+          resolve(res.statusCode);
+        }).on('error', reject);
+      });
+      results.push(statusCode);
+    }
+
+    // First 5 should succeed, 6th+ should be rate limited
+    assert.ok(results.slice(0, 5).every(s => s === 200), 'First 5 requests should succeed');
+    assert.ok(results.slice(5).some(s => s === 429), 'Later requests should be rate limited');
+  } finally {
+    server.kill('SIGTERM');
+    await new Promise(r => setTimeout(r, 500));
+  }
+});
+
 // ---- Script Syntax Tests ----
 console.log('\n📋 Script Syntax');
 const fs = require('fs');
@@ -402,15 +551,21 @@ if (fs.existsSync(configDir)) {
   });
 }
 
-// ---- Results ----
-console.log(`\n${'═'.repeat(40)}`);
-console.log(`  Results: ${passed} passed, ${failed} failed`);
-console.log(`${'═'.repeat(40)}\n`);
+// ---- Run Async Tests & Print Results ----
+(async () => {
+  for (const runTest of asyncTests) {
+    await runTest();
+  }
 
-if (failed > 0) {
-  console.log('Failed tests:');
-  errors.forEach(({ name, error }) => console.log(`  ✗ ${name}: ${error}`));
-  process.exit(1);
-}
+  console.log(`\n${'═'.repeat(40)}`);
+  console.log(`  Results: ${passed} passed, ${failed} failed`);
+  console.log(`${'═'.repeat(40)}\n`);
 
-process.exit(0);
+  if (failed > 0) {
+    console.log('Failed tests:');
+    errors.forEach(({ name, error }) => console.log(`  ✗ ${name}: ${error}`));
+    process.exit(1);
+  }
+
+  process.exit(0);
+})();

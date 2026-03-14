@@ -4,7 +4,7 @@
   <p align="center">
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js" alt="Node.js">
     <img src="https://img.shields.io/badge/Dependencies-0-brightgreen" alt="Zero Dependencies">
-    <img src="https://img.shields.io/badge/Tests-51%20passed-success" alt="Tests">
+    <img src="https://img.shields.io/badge/Tests-56%20passed-success" alt="Tests">
     <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
     <img src="https://img.shields.io/badge/Binance-API-F0B90B?logo=binance" alt="Binance API">
   </p>

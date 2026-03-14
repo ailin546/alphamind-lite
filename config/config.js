@@ -60,6 +60,11 @@ const config = {
       url: process.env.FEAR_GREED_URL || 'https://api.alternative.me/fng/',
       timeout: parseInt(process.env.API_TIMEOUT || '10000', 10),
     },
+    bscscan: {
+      url: process.env.BSCSCAN_API_URL || 'https://api.bscscan.com/api',
+      apiKey: process.env.BSCSCAN_API_KEY || '',
+      timeout: parseInt(process.env.API_TIMEOUT || '8000', 10),
+    },
     tavily: {
       url: 'https://api.tavily.com/search',
       apiKey: process.env.TAVILY_API_KEY || '',
