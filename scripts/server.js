@@ -42,7 +42,6 @@ const _cacheCleanupTimer = setInterval(() => {
 }, 60000);
 
 // ---- Allowed static file extensions ----
-const ALLOWED_STATIC_DIRS = new Set(['', 'nginx', 'docs']);
 const SENSITIVE_PATHS = ['/config/', '/data/', '/logs/', '/.env', '/.git', '/scripts/', '/.claude',
   '/package.json', '/package-lock.json', '/docker-compose.yml', '/dockerfile',
   '/ecosystem.config.js', '/deploy.sh', '/.dockerignore', '/claude.md'];
@@ -1193,14 +1192,15 @@ const DEMO_DATA = {
     { symbol: 'AVAX', price: 38.75, change24h: 1.89, high24h: 39.50, low24h: 37.20, volume24h: 520000000 },
   ],
   fearGreed: { value: 45, sentiment: 'Fear', advice: 'Market shows fear — historically a potential accumulation zone. Consider DCA.' },
-  klines: Array.from({ length: 24 }, (_, i) => ({
-    time: Date.now() - (23 - i) * 3600000,
-    open: 66000 + Math.random() * 3000,
-    high: 67000 + Math.random() * 2000,
-    low: 65000 + Math.random() * 2000,
-    close: 66500 + Math.random() * 2500,
-    volume: 1000000000 + Math.random() * 500000000,
-  })),
+  klines: Array.from({ length: 24 }, (_, i) => {
+    const base = 66000 + Math.sin(i * 0.3) * 1500;
+    const open = base + Math.random() * 500;
+    const close = base + Math.random() * 500;
+    const high = Math.max(open, close) + Math.random() * 800;
+    const low = Math.min(open, close) - Math.random() * 800;
+    return { time: Date.now() - (23 - i) * 3600000, open, high, low, close,
+    volume: 1000000000 + Math.random() * 500000000 };
+  }),
 };
 
 // ---- Router ----
