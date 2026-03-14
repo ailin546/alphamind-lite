@@ -37,8 +37,10 @@
 
 - **零代码** - 纯 Web 界面，打开浏览器即可使用，无需任何技术背景
 - **零依赖** - 纯 Node.js 实现，`node server.js` 一键启动，无需 `npm install`
-- **实时数据** - 直接对接 Binance REST API，12+ 主流币种毫秒级行情
-- **AI 智能分析** - 内置 AI 交易助手，用自然语言问"现在该买BTC吗？"
+- **实时数据** - 直接对接 Binance REST API + SSE 推送，12+ 主流币种毫秒级行情
+- **技术指标** - RSI、MACD、布林带、SMA/EMA + 多时间框架（1H/4H/1D）融合分析
+- **BSC 链数据** - Gas 追踪、BNB 市值、BSC 生态代币、BEP-20 标准
+- **AI 智能分析** - 内置 AI 交易助手，结合技术指标给出实时分析建议
 - **全天候监控** - 7×24 自动刷新，价格提醒 + 巨鲸追踪 + 套利扫描
 
 ---
@@ -49,7 +51,7 @@
 # 克隆 & 启动（无需 npm install）
 git clone https://github.com/ailin546/alphamind-lite.git
 cd alphamind-lite
-node scripts/server.js
+node server.js
 
 # 浏览器打开 http://localhost:3000 即可使用
 ```
@@ -206,7 +208,7 @@ node scripts/server.js
 ### 方式一：直接运行
 
 ```bash
-node scripts/server.js
+node server.js
 # 或
 npm start
 ```
@@ -348,7 +350,7 @@ AlphaMind Lite is a **zero-dependency** open-source AI crypto investment assista
 ```bash
 git clone https://github.com/ailin546/alphamind-lite.git
 cd alphamind-lite
-node scripts/server.js
+node server.js
 # Open http://localhost:3000
 ```
 
