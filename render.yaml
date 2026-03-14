@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: alphamind-lite
+    runtime: node
+    plan: free
+    buildCommand: echo "Zero dependencies - no build needed"
+    startCommand: node scripts/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+    healthCheckPath: /health
+    autoDeploy: true

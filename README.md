@@ -15,6 +15,8 @@
 
 <p align="center">
   <a href="https://railway.app/template/alphamind-lite"><img src="https://railway.app/button.svg" alt="Deploy on Railway" height="32"></a>
+  &nbsp;
+  <a href="https://render.com/deploy?repo=https://github.com/ailin546/alphamind-lite"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" height="32"></a>
 </p>
 
 ---
@@ -47,7 +49,7 @@
 # 克隆 & 启动（无需 npm install）
 git clone https://github.com/ailin546/alphamind-lite.git
 cd alphamind-lite
-node server.js
+node scripts/server.js
 
 # 浏览器打开 http://localhost:3000 即可使用
 ```
@@ -199,7 +201,7 @@ node server.js
 ### 方式一：直接运行
 
 ```bash
-node server.js
+node scripts/server.js
 # 或
 npm start
 ```
@@ -341,7 +343,7 @@ AlphaMind Lite is a **zero-dependency** open-source AI crypto investment assista
 ```bash
 git clone https://github.com/ailin546/alphamind-lite.git
 cd alphamind-lite
-node server.js
+node scripts/server.js
 # Open http://localhost:3000
 ```
 
