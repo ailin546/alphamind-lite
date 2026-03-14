@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { getLogger, createLogger } = require('./logger');
-const { fetchMarketData, fetchFearGreedIndex, fetchMultiplePrices, fetchFundingRates, fetchKlines } = require('./api-client');
+const { fetchMarketData, fetchFearGreedIndex, fetchMultiplePrices, fetchFundingRates, fetchKlines, fetchBSCGasPrice, fetchBNBTokenInfo, fetchBSCTokens, calculateIndicators } = require('./api-client');
 const db = require('./db');
 
 createLogger({ context: 'server' });
@@ -462,25 +462,28 @@ async function handleAIChat(req, res) {
     session.history.push({ role: 'user', content: message, time: Date.now() });
     if (session.history.length > 20) session.history = session.history.slice(-20);
 
-    // Fetch comprehensive live market context
+    // Fetch comprehensive live market context + technical indicators
     let ctx = {};
     try {
-      const [btc, eth, bnb, sol, fg] = await Promise.all([
+      const [btc, eth, bnb, sol, fg, btcKlines] = await Promise.all([
         fetchMarketData('BTCUSDT'),
         fetchMarketData('ETHUSDT'),
         fetchMarketData('BNBUSDT'),
         fetchMarketData('SOLUSDT'),
         fetchFearGreedIndex().catch(() => null),
+        fetchKlines('BTCUSDT', '4h', 100).catch(() => null),
       ]);
+      const indicators = btcKlines ? calculateIndicators(btcKlines) : null;
       ctx = {
         btc: { price: parseFloat(btc.lastPrice), change: parseFloat(btc.priceChangePercent), high: parseFloat(btc.highPrice), low: parseFloat(btc.lowPrice), vol: parseFloat(btc.quoteVolume) },
         eth: { price: parseFloat(eth.lastPrice), change: parseFloat(eth.priceChangePercent) },
         bnb: { price: parseFloat(bnb.lastPrice), change: parseFloat(bnb.priceChangePercent) },
         sol: { price: parseFloat(sol.lastPrice), change: parseFloat(sol.priceChangePercent) },
         fg: fg?.data?.[0] ? { value: parseInt(fg.data[0].value), label: fg.data[0].value_classification } : null,
+        indicators,
       };
     } catch {
-      ctx = { btc: { price: DEMO_DATA.prices.BTC, change: 2.3 }, eth: { price: DEMO_DATA.prices.ETH, change: 1.5 }, bnb: { price: DEMO_DATA.prices.BNB, change: -0.8 }, sol: { price: DEMO_DATA.prices.SOL, change: 5.2 }, fg: { value: 45, label: 'Fear' }, demo: true };
+      ctx = { btc: { price: DEMO_DATA.prices.BTC, change: 2.3 }, eth: { price: DEMO_DATA.prices.ETH, change: 1.5 }, bnb: { price: DEMO_DATA.prices.BNB, change: -0.8 }, sol: { price: DEMO_DATA.prices.SOL, change: 5.2 }, fg: { value: 45, label: 'Fear' }, indicators: null, demo: true };
     }
 
     // Get user portfolio for personalized advice
@@ -507,8 +510,13 @@ function generateAnalysis(msg, ctx, portfolio, history) {
   const fmtPrice = (n) => n >= 1 ? `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${n.toFixed(6)}`;
   const fmtPct = (n) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
-  // Live market summary header
-  const header = `📊 **Market Snapshot** | BTC ${fmtPrice(b.price)} (${fmtPct(b.change)}) | ETH ${fmtPrice(ctx.eth.price)} (${fmtPct(ctx.eth.change)}) | Fear & Greed: ${fg ? `${fg.value}/100 (${fg.label})` : 'N/A'}\n\n`;
+  // Live market summary header with technical indicators
+  const ind = ctx.indicators;
+  let headerExtra = '';
+  if (ind) {
+    headerExtra = ` | RSI: ${ind.rsi || 'N/A'} | Signal: ${(ind.signal || 'hold').toUpperCase()}`;
+  }
+  const header = `📊 **Market Snapshot** | BTC ${fmtPrice(b.price)} (${fmtPct(b.change)}) | ETH ${fmtPrice(ctx.eth.price)} (${fmtPct(ctx.eth.change)}) | Fear & Greed: ${fg ? `${fg.value}/100 (${fg.label})` : 'N/A'}${headerExtra}\n\n`;
 
   // Detect intent from message
   const intents = detectIntents(msg);
@@ -524,6 +532,15 @@ function generateAnalysis(msg, ctx, portfolio, history) {
     if (fg) {
       analysis += `• Sentiment: ${fg.value <= 25 ? '🔴 Extreme fear — historically a contrarian buy signal. Smart money accumulates here.' : fg.value <= 45 ? '🟠 Fear zone — potential accumulation opportunity for long-term holders.' : fg.value <= 55 ? '🟡 Neutral — market is undecided, wait for clearer signals.' : fg.value <= 75 ? '🟢 Greed zone — consider taking partial profits and tightening stop-losses.' : '🔴 Extreme greed — high risk of correction. Reduce exposure.'}\n`;
     }
+    if (ind) {
+      analysis += `\n**Technical Indicators (4H):**\n`;
+      analysis += `• RSI(14): ${ind.rsi} ${ind.rsi < 30 ? '— Oversold ✅' : ind.rsi > 70 ? '— Overbought ⚠️' : '— Neutral'}\n`;
+      if (ind.macd) analysis += `• MACD: ${ind.macd.histogram > 0 ? 'Bullish' : 'Bearish'} (histogram: ${ind.macd.histogram})\n`;
+      if (ind.bollinger) analysis += `• Bollinger: ${fmtPrice(ind.bollinger.lower)} — ${fmtPrice(ind.bollinger.upper)} (mid: ${fmtPrice(ind.bollinger.middle)})\n`;
+      if (ind.sma.sma7 && ind.sma.sma25) analysis += `• SMA: ${ind.sma.sma7 > ind.sma.sma25 ? '7 > 25 (Bullish cross ✅)' : '7 < 25 (Bearish cross ⚠️)'}\n`;
+      analysis += `• Volume: ${ind.volume.trend === 'high' ? '📈 High volume — strong conviction' : ind.volume.trend === 'low' ? '📉 Low volume — weak conviction' : '📊 Normal volume'}\n`;
+      analysis += `• 🎯 Technical Signal: **${ind.signal.toUpperCase()}** (strength: ${ind.strength})\n`;
+    }
   }
 
   if (intents.includes('buy_advice')) {
@@ -532,6 +549,10 @@ function generateAnalysis(msg, ctx, portfolio, history) {
     if (symbol && ctx[symbol.toLowerCase()]) {
       const coin = ctx[symbol.toLowerCase()];
       analysis += `• ${symbol.toUpperCase()} is at ${fmtPrice(coin.price)} (${fmtPct(coin.change)} 24h)\n`;
+    }
+    if (ind) {
+      analysis += `• RSI: ${ind.rsi} ${ind.rsi < 30 ? '— Oversold (good entry)' : ind.rsi > 70 ? '— Overbought (wait for pullback)' : '— Neutral zone'}\n`;
+      analysis += `• Technical signal: ${ind.signal.toUpperCase()} (strength: ${ind.strength})\n`;
     }
     if (fg && fg.value < 40) {
       analysis += `• Fear index at ${fg.value} suggests the crowd is pessimistic — historically favors buyers\n`;
@@ -937,6 +958,83 @@ function checkAlertsAgainstPrices(prices) {
   return triggered;
 }
 
+// ---- BSC Chain Data API ----
+async function handleBSCData(req, res) {
+  try {
+    const cacheKey = 'bsc-data';
+    const cached = getCached(cacheKey);
+    if (cached) return sendJSON(res, 200, cached);
+
+    const [gasPrice, bnbInfo, bscTokens] = await Promise.all([
+      fetchBSCGasPrice(),
+      fetchBNBTokenInfo(),
+      fetchBSCTokens(),
+    ]);
+
+    const response = {
+      ok: true,
+      chain: 'BSC',
+      gas: gasPrice,
+      bnb: bnbInfo,
+      ecosystem: bscTokens,
+      stats: {
+        avgBlockTime: '3s',
+        tps: '~100',
+        validators: 21,
+        totalSupply: bnbInfo.totalSupply,
+        marketCap: bnbInfo.marketCap,
+      },
+    };
+    setCache(cacheKey, response, 15000);
+    sendJSON(res, 200, response);
+  } catch (err) {
+    log.error('BSC data error', { error: err.message });
+    metrics.errors++;
+    sendJSON(res, 200, {
+      ok: true, degraded: true, source: 'demo', chain: 'BSC',
+      gas: { low: 3, standard: 5, fast: 7 },
+      bnb: { price: DEMO_DATA.prices.BNB, volume24h: 1800000000, change24h: -0.82, totalSupply: 145934062, marketCap: 145934062 * DEMO_DATA.prices.BNB },
+      ecosystem: [
+        { symbol: 'CAKE', price: 2.45, change24h: 1.2, volume24h: 85000000 },
+        { symbol: 'XVS', price: 8.30, change24h: -0.5, volume24h: 12000000 },
+      ],
+      stats: { avgBlockTime: '3s', tps: '~100', validators: 21 },
+    });
+  }
+}
+
+// ---- Technical Indicators API ----
+async function handleIndicators(req, res) {
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const symbol = (url.searchParams.get('symbol') || 'BTC').toUpperCase();
+    const interval = url.searchParams.get('interval') || '4h';
+
+    if (!/^[A-Z0-9]{2,10}$/.test(symbol)) return sendJSON(res, 400, { error: 'Invalid symbol' });
+    const VALID_INTERVALS = ['1h', '4h', '1d'];
+    if (!VALID_INTERVALS.includes(interval)) return sendJSON(res, 400, { error: 'Invalid interval' });
+
+    const cacheKey = `indicators:${symbol}:${interval}`;
+    const cached = getCached(cacheKey);
+    if (cached) return sendJSON(res, 200, cached);
+
+    const klines = await fetchKlines(`${symbol}USDT`, interval, 100);
+    const indicators = calculateIndicators(klines);
+
+    if (!indicators) {
+      return sendJSON(res, 200, { ok: true, degraded: true, message: 'Insufficient data for indicators' });
+    }
+
+    const response = { ok: true, symbol, interval, ...indicators };
+    setCache(cacheKey, response, CACHE_TTL.klines);
+    sendJSON(res, 200, response);
+  } catch (err) {
+    log.error('Indicators error', { error: err.message });
+    metrics.errors++;
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', symbol: 'BTC', rsi: 52.3, signal: 'hold', strength: 0 });
+  }
+}
+
 // ---- Get Latest Prices API (for offline/demo mode) ----
 function handleLatestPrices(req, res) {
   if (Object.keys(_lastPrices).length === 0) {
@@ -991,6 +1089,8 @@ const routes = {
   'POST /api/risk': handleRisk,
   'POST /api/dca': handleDCA,
   'POST /api/ai-chat': handleAIChat,
+  'GET /api/bsc': handleBSCData,
+  'GET /api/indicators': handleIndicators,
   'GET /api/prices': handleLatestPrices,
   'GET /api/stream': handleSSE,
   'GET /metrics': handleMetrics,

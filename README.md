@@ -4,7 +4,7 @@
   <p align="center">
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js" alt="Node.js">
     <img src="https://img.shields.io/badge/Dependencies-0-brightgreen" alt="Zero Dependencies">
-    <img src="https://img.shields.io/badge/Tests-46%20passed-success" alt="Tests">
+    <img src="https://img.shields.io/badge/Tests-51%20passed-success" alt="Tests">
     <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
     <img src="https://img.shields.io/badge/Binance-API-F0B90B?logo=binance" alt="Binance API">
   </p>
@@ -192,7 +192,12 @@ node scripts/server.js
 | POST | `/api/risk` | 仓位风险计算 |
 | POST | `/api/dca` | 定投收益模拟 |
 | POST | `/api/ai-chat` | AI 智能对话 |
+| GET | `/api/bsc` | BSC 链上数据（Gas/BNB/生态代币） |
+| GET | `/api/indicators?symbol=BTC` | 技术指标（RSI/MACD/布林带） |
+| GET | `/api/funding` | 永续合约资金费率 |
+| GET | `/api/stream` | SSE 实时价格推送 |
 | GET | `/health` | 服务健康检查 |
+| GET | `/metrics` | Prometheus 监控指标 |
 
 ---
 

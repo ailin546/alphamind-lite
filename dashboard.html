@@ -532,6 +532,9 @@
       <div class="nav-item" data-page="tools" role="button" tabindex="0" onclick="showPage('tools')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('tools')}">
         <span class="nav-icon">&#128295;</span> <span class="nav-text">Tools</span>
       </div>
+      <div class="nav-item" data-page="bsc" role="button" tabindex="0" onclick="showPage('bsc')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('bsc')}">
+        <span class="nav-icon">&#9939;</span> <span class="nav-text">BSC Chain</span>
+      </div>
       <div class="nav-item" data-page="ai" role="button" tabindex="0" onclick="showPage('ai')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('ai')}">
         <span class="nav-icon">&#129302;</span> <span class="nav-text">AI Chat</span>
       </div>
@@ -904,6 +907,92 @@ Ask me anything about cryptocurrency markets, for example:
         </div>
       </div>
 
+      <!-- ═══ BSC CHAIN PAGE ═══ -->
+      <div id="page-bsc" class="page">
+        <div class="header">
+          <h2>BNB Smart Chain</h2>
+          <div class="header-actions">
+            <button class="btn" onclick="loadBSCData()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="grid-3" id="bsc-stats">
+          <div class="stat-card">
+            <div class="stat-label">BNB Price</div>
+            <div class="stat-value" id="bsc-bnb-price">--</div>
+            <div class="stat-change" id="bsc-bnb-change">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Gas Price (Gwei)</div>
+            <div class="stat-value" id="bsc-gas">--</div>
+            <div class="stat-change" style="color:var(--text-dim)">Low / Standard / Fast</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Market Cap</div>
+            <div class="stat-value" id="bsc-mcap">--</div>
+            <div class="stat-change" style="color:var(--text-dim)">Total Supply: ~146M BNB</div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <div class="card">
+            <div class="card-title">Chain Stats</div>
+            <div style="display:grid;gap:12px">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Block Time</span><span>~3 seconds</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">TPS</span><span>~100 tx/s</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Validators</span><span>21 Active</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Consensus</span><span>PoSA (Proof of Staked Authority)</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0">
+                <span style="color:var(--text-dim)">EVM Compatible</span><span style="color:var(--up)">Yes</span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">BSC Ecosystem Tokens</div>
+            <table class="market-table" id="bsc-tokens-table">
+              <thead>
+                <tr><th>Token</th><th>Price</th><th>24h</th></tr>
+              </thead>
+              <tbody id="bsc-tokens-body">
+                <tr><td colspan="3" style="text-align:center;color:var(--text-dim)">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">BTC Technical Indicators</div>
+          <div id="tech-indicators" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <div class="stat-card">
+              <div class="stat-label">RSI (14)</div>
+              <div class="stat-value" id="ti-rsi">--</div>
+              <div class="stat-change" id="ti-rsi-label">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">MACD</div>
+              <div class="stat-value" id="ti-macd">--</div>
+              <div class="stat-change" id="ti-macd-label">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Signal</div>
+              <div class="stat-value" id="ti-signal" style="text-transform:uppercase">--</div>
+              <div class="stat-change" id="ti-strength">--</div>
+            </div>
+          </div>
+          <div id="ti-bollinger" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;font-size:0.9em;color:var(--text-dim)">
+            Bollinger Bands: Loading...
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -947,6 +1036,7 @@ Ask me anything about cryptocurrency markets, for example:
       else if (name === 'sentiment') loadSentiment();
       else if (name === 'portfolio') renderHoldings();
       else if (name === 'risk') renderAlerts();
+      else if (name === 'bsc') loadBSCData();
     }
 
     // ─── Dashboard ───────────────────────────────────────────────────────────
@@ -1452,6 +1542,68 @@ Ask me anything about cryptocurrency markets, for example:
           <div class="dca-item"><div class="dca-item-label">Profit/Loss</div><div class="dca-item-value ${cls}">${fmtUSD(profit)} (${fmtPct(pct)})</div></div>
         </div>
       `;
+    }
+
+    // ─── BSC Chain Data ──────────────────────────────────────────────────────
+    async function loadBSCData() {
+      try {
+        const [bsc, indicators] = await Promise.all([
+          api('/api/bsc'),
+          api('/api/indicators?symbol=BTC&interval=4h'),
+        ]);
+
+        // BNB stats
+        if (bsc.bnb) {
+          document.getElementById('bsc-bnb-price').textContent = fmtUSD(bsc.bnb.price);
+          const changeEl = document.getElementById('bsc-bnb-change');
+          changeEl.textContent = fmtPct(bsc.bnb.change24h);
+          changeEl.className = 'stat-change ' + (bsc.bnb.change24h >= 0 ? 'up' : 'down');
+        }
+        if (bsc.gas) {
+          document.getElementById('bsc-gas').textContent = `${bsc.gas.low} / ${bsc.gas.standard} / ${bsc.gas.fast}`;
+        }
+        if (bsc.bnb && bsc.bnb.marketCap) {
+          document.getElementById('bsc-mcap').textContent = '$' + fmt(bsc.bnb.marketCap / 1e9, 1) + 'B';
+        }
+
+        // Ecosystem tokens
+        if (bsc.ecosystem && bsc.ecosystem.length > 0) {
+          const tbody = document.getElementById('bsc-tokens-body');
+          tbody.innerHTML = bsc.ecosystem.map(t => `<tr>
+            <td><span class="coin-name"><span class="coin-icon">${t.symbol.charAt(0)}</span>${t.symbol}</span></td>
+            <td>${fmtUSD(t.price)}</td>
+            <td class="${t.change24h >= 0 ? 'up' : 'down'}">${fmtPct(t.change24h)}</td>
+          </tr>`).join('');
+        }
+
+        // Technical indicators
+        if (indicators && indicators.rsi != null) {
+          document.getElementById('ti-rsi').textContent = indicators.rsi;
+          const rsiLabel = document.getElementById('ti-rsi-label');
+          if (indicators.rsi < 30) { rsiLabel.textContent = 'Oversold'; rsiLabel.className = 'stat-change up'; }
+          else if (indicators.rsi > 70) { rsiLabel.textContent = 'Overbought'; rsiLabel.className = 'stat-change down'; }
+          else { rsiLabel.textContent = 'Neutral'; rsiLabel.className = 'stat-change'; }
+        }
+        if (indicators && indicators.macd) {
+          document.getElementById('ti-macd').textContent = indicators.macd.histogram > 0 ? 'Bullish' : 'Bearish';
+          document.getElementById('ti-macd-label').textContent = `Histogram: ${indicators.macd.histogram}`;
+          document.getElementById('ti-macd-label').className = 'stat-change ' + (indicators.macd.histogram > 0 ? 'up' : 'down');
+        }
+        if (indicators && indicators.signal) {
+          const sigEl = document.getElementById('ti-signal');
+          sigEl.textContent = indicators.signal;
+          sigEl.style.color = indicators.signal === 'buy' ? 'var(--up)' : indicators.signal === 'sell' ? 'var(--down)' : 'var(--warning)';
+          document.getElementById('ti-strength').textContent = `Strength: ${indicators.strength || 0}`;
+        }
+        if (indicators && indicators.bollinger) {
+          const bb = indicators.bollinger;
+          document.getElementById('ti-bollinger').innerHTML = `<strong>Bollinger Bands (20):</strong> Lower: ${fmtUSD(bb.lower)} | Middle: ${fmtUSD(bb.middle)} | Upper: ${fmtUSD(bb.upper)}`;
+        }
+
+        checkDemoMode(bsc);
+      } catch (err) {
+        showToast('Failed to load BSC data: ' + err.message, 'error');
+      }
     }
 
     // ─── AI Chat ─────────────────────────────────────────────────────────────

@@ -92,10 +92,83 @@ test('api-client module loads', () => {
 
 test('api-client has all expected exports', () => {
   const api = require('./api-client');
-  const expected = ['httpGet', 'fetchMarketData', 'fetchPrice', 'fetchMultiplePrices', 'fetchFearGreedIndex', 'fetchFundingRates', 'fetchKlines'];
+  const expected = ['httpGet', 'fetchMarketData', 'fetchPrice', 'fetchMultiplePrices', 'fetchFearGreedIndex', 'fetchFundingRates', 'fetchKlines', 'fetchBSCGasPrice', 'fetchBNBTokenInfo', 'fetchBSCTokens', 'calculateIndicators'];
   expected.forEach(fn => {
     assert.strictEqual(typeof api[fn], 'function', `Missing export: ${fn}`);
   });
+});
+
+// ---- Technical Indicators Tests ----
+console.log('\n📋 Technical Indicators');
+test('calculateIndicators returns null for insufficient data', () => {
+  const { calculateIndicators } = require('./api-client');
+  assert.strictEqual(calculateIndicators(null), null);
+  assert.strictEqual(calculateIndicators([]), null);
+  assert.strictEqual(calculateIndicators(new Array(10).fill([0,0,0,0,0,0])), null);
+});
+
+test('calculateIndicators produces valid RSI range', () => {
+  const { calculateIndicators } = require('./api-client');
+  // Generate 100 fake klines: [time, open, high, low, close, volume]
+  const klines = [];
+  let price = 50000;
+  for (let i = 0; i < 100; i++) {
+    const change = (Math.random() - 0.48) * 1000;
+    const open = price;
+    price += change;
+    const high = Math.max(open, price) + Math.random() * 200;
+    const low = Math.min(open, price) - Math.random() * 200;
+    klines.push([Date.now() - (100 - i) * 3600000, open, high, low, price, 1000000 + Math.random() * 500000]);
+  }
+  const result = calculateIndicators(klines);
+  assert.ok(result, 'Should return indicators');
+  assert.ok(result.rsi >= 0 && result.rsi <= 100, `RSI ${result.rsi} should be 0-100`);
+  assert.ok(['buy', 'sell', 'hold'].includes(result.signal), `Signal should be buy/sell/hold, got ${result.signal}`);
+  assert.ok(result.sma.sma7 !== null, 'SMA7 should exist');
+  assert.ok(result.sma.sma25 !== null, 'SMA25 should exist');
+});
+
+test('calculateIndicators Bollinger Bands contain price', () => {
+  const { calculateIndicators } = require('./api-client');
+  const klines = [];
+  let price = 60000;
+  for (let i = 0; i < 100; i++) {
+    const change = (Math.random() - 0.5) * 500;
+    price += change;
+    klines.push([Date.now() - (100 - i) * 3600000, price, price + 100, price - 100, price, 2000000]);
+  }
+  const result = calculateIndicators(klines);
+  assert.ok(result.bollinger, 'Bollinger Bands should exist');
+  assert.ok(result.bollinger.upper > result.bollinger.middle, 'Upper > Middle');
+  assert.ok(result.bollinger.middle > result.bollinger.lower, 'Middle > Lower');
+});
+
+test('calculateIndicators MACD structure', () => {
+  const { calculateIndicators } = require('./api-client');
+  const klines = [];
+  let price = 40000;
+  for (let i = 0; i < 100; i++) {
+    price += (Math.random() - 0.45) * 300;
+    klines.push([Date.now() - (100 - i) * 3600000, price, price + 50, price - 50, price, 1500000]);
+  }
+  const result = calculateIndicators(klines);
+  assert.ok(result.macd, 'MACD should exist');
+  assert.strictEqual(typeof result.macd.macd, 'number', 'MACD line should be number');
+  assert.strictEqual(typeof result.macd.histogram, 'number', 'MACD histogram should be number');
+});
+
+test('calculateIndicators volume trend detection', () => {
+  const { calculateIndicators } = require('./api-client');
+  const klines = [];
+  let price = 50000;
+  for (let i = 0; i < 100; i++) {
+    price += (Math.random() - 0.5) * 200;
+    // Last 3 have very high volume
+    const vol = i >= 97 ? 10000000 : 1000000;
+    klines.push([Date.now() - (100 - i) * 3600000, price, price + 50, price - 50, price, vol]);
+  }
+  const result = calculateIndicators(klines);
+  assert.strictEqual(result.volume.trend, 'high', 'Should detect high volume trend');
 });
 
 // ---- DB Tests ----
