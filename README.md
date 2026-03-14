@@ -2,8 +2,19 @@
   <h1 align="center">AlphaMind Lite</h1>
   <p align="center"><strong>AI 驱动的加密货币智能投资助手</strong></p>
   <p align="center">
+    <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js" alt="Node.js">
+    <img src="https://img.shields.io/badge/Dependencies-0-brightgreen" alt="Zero Dependencies">
+    <img src="https://img.shields.io/badge/Tests-46%20passed-success" alt="Tests">
+    <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
+    <img src="https://img.shields.io/badge/Binance-API-F0B90B?logo=binance" alt="Binance API">
+  </p>
+  <p align="center">
     <a href="#快速开始">快速开始</a> · <a href="#功能全览">功能全览</a> · <a href="#技术架构">技术架构</a> · <a href="#english-version">English</a>
   </p>
+</p>
+
+<p align="center">
+  <a href="https://railway.app/template/alphamind-lite"><img src="https://railway.app/button.svg" alt="Deploy on Railway" height="32"></a>
 </p>
 
 ---
@@ -262,7 +273,7 @@ alphamind-lite/
 ```bash
 npm test
 # ════════════════════════════════════════
-#   Results: 36 passed, 0 failed
+#   Results: 46 passed, 0 failed
 # ════════════════════════════════════════
 ```
 
@@ -361,7 +372,7 @@ node server.js
 ## Tests
 
 ```bash
-npm test  # 36 tests, all passing
+npm test  # 46 tests, all passing
 ```
 
 ## License

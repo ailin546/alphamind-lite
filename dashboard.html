@@ -409,6 +409,10 @@
       cursor: pointer;
       font-size: 1.2em;
     }
+    @media (max-width: 1024px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .dca-result { grid-template-columns: repeat(2, 1fr); }
+    }
     @media (max-width: 768px) {
       .mobile-toggle { display: block; }
       .sidebar { transform: translateX(-100%); }
@@ -417,6 +421,8 @@
       .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
       .pf-summary { grid-template-columns: repeat(2, 1fr); }
       .form-row { flex-direction: column; }
+      .dca-result { grid-template-columns: 1fr; }
+      .tabs { flex-wrap: wrap; }
     }
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
@@ -677,7 +683,7 @@
         <div class="advice-box" id="pf-advice" style="display:none"></div>
 
         <!-- Allocation chart -->
-        <div class="card" style="margin-top:16px" id="pf-chart-card" style="display:none">
+        <div class="card" id="pf-chart-card" style="margin-top:16px;display:none">
           <div class="card-title">Portfolio Allocation</div>
           <div class="chart-wrap" style="height:300px"><canvas id="chart-portfolio"></canvas></div>
         </div>

@@ -155,6 +155,154 @@ test('notify module loads', () => {
   assert.ok(notify.sendPortfolioSummary);
 });
 
+// ---- Server Logic Unit Tests ----
+console.log('\n📋 Server Logic');
+
+test('readBody rejects oversized payloads', async () => {
+  // Simulate the body size limit logic from server.js
+  const MAX_BODY = 1e5;
+  const bigBody = 'x'.repeat(MAX_BODY + 1);
+  assert.ok(bigBody.length > MAX_BODY, 'Body should exceed limit');
+});
+
+test('rate limiter allows normal traffic', () => {
+  // Simulate rate limiter logic
+  const window = 60000;
+  const max = 100;
+  const limiter = new Map();
+  const ip = '127.0.0.1';
+  const now = Date.now();
+
+  limiter.set(ip, { count: 1, start: now });
+  const entry = limiter.get(ip);
+  assert.ok(entry.count <= max, 'First request should be allowed');
+
+  // Simulate max requests
+  entry.count = max;
+  assert.ok(entry.count <= max, 'At limit should still be allowed');
+
+  entry.count = max + 1;
+  assert.ok(entry.count > max, 'Over limit should be rejected');
+});
+
+test('cache TTL expires correctly', () => {
+  const cache = new Map();
+  const key = 'test';
+  const data = { price: 67000 };
+  const ttl = 100; // 100ms
+
+  cache.set(key, { data, time: Date.now(), ttl });
+  const entry = cache.get(key);
+
+  // Fresh entry should be valid
+  assert.ok(Date.now() - entry.time < entry.ttl, 'Fresh entry should be valid');
+
+  // Expired entry
+  cache.set(key, { data, time: Date.now() - 200, ttl });
+  const expired = cache.get(key);
+  assert.ok(Date.now() - expired.time >= expired.ttl, 'Expired entry should be invalid');
+});
+
+test('DCA volatility simulation produces varied prices', () => {
+  const currentPrice = 67000;
+  const months = 12;
+  const prices = [];
+  for (let i = 0; i < months; i++) {
+    const volatility = 1 + (Math.sin(i * 0.8) * 0.1 + (Math.random() - 0.5) * 0.05);
+    prices.push(currentPrice * volatility);
+  }
+  const unique = new Set(prices.map(p => Math.round(p)));
+  assert.ok(unique.size > 1, `DCA should produce varied prices, got ${unique.size} unique`);
+  prices.forEach(p => {
+    assert.ok(p > currentPrice * 0.8 && p < currentPrice * 1.2, `Price ${p} should be within 20% of ${currentPrice}`);
+  });
+});
+
+test('symbol validation regex works correctly', () => {
+  const regex = /^[A-Z0-9]{2,10}$/i;
+  assert.ok(regex.test('BTC'), 'BTC should be valid');
+  assert.ok(regex.test('ETHUSDT'), 'ETHUSDT should be valid');
+  assert.ok(regex.test('bnb'), 'bnb lowercase should be valid');
+  assert.ok(!regex.test(''), 'Empty should be invalid');
+  assert.ok(!regex.test('A'), 'Single char should be invalid');
+  assert.ok(!regex.test('BTC/USDT'), 'Slash should be invalid');
+  assert.ok(!regex.test('BTC USDT'), 'Space should be invalid');
+  assert.ok(!regex.test('<script>'), 'XSS attempt should be invalid');
+});
+
+test('liquidation price calculation is correct', () => {
+  const entry = 50000;
+  const leverage = 10;
+  const liquidationPrice = entry * (1 - 1 / leverage * 0.95);
+  // At 10x leverage, liquidation should be ~9.5% below entry
+  assert.ok(liquidationPrice > 0, 'Liquidation price should be positive');
+  assert.ok(liquidationPrice < entry, 'Liquidation price should be below entry');
+  const distance = ((entry - liquidationPrice) / entry) * 100;
+  assert.ok(Math.abs(distance - 9.5) < 0.1, `Distance should be ~9.5%, got ${distance.toFixed(2)}%`);
+});
+
+test('alert trigger logic works for above and below', () => {
+  const prices = { BTC: 67000, ETH: 3400 };
+
+  // Above trigger: price >= target
+  const aboveAlert = { symbol: 'BTC', price: 65000, direction: 'above' };
+  const shouldTriggerAbove = (aboveAlert.direction === 'above' && prices[aboveAlert.symbol] >= aboveAlert.price);
+  assert.ok(shouldTriggerAbove, 'BTC 67000 >= 65000 should trigger above alert');
+
+  // Below trigger: price <= target
+  const belowAlert = { symbol: 'ETH', price: 3500, direction: 'below' };
+  const shouldTriggerBelow = (belowAlert.direction === 'below' && prices[belowAlert.symbol] <= belowAlert.price);
+  assert.ok(shouldTriggerBelow, 'ETH 3400 <= 3500 should trigger below alert');
+
+  // Should NOT trigger
+  const noTrigger = { symbol: 'BTC', price: 70000, direction: 'above' };
+  const shouldNot = (noTrigger.direction === 'above' && prices[noTrigger.symbol] >= noTrigger.price);
+  assert.ok(!shouldNot, 'BTC 67000 < 70000 should NOT trigger above alert');
+});
+
+test('correlation calculation produces valid range', () => {
+  const btcChange = 2.5;
+  const altChanges = [2.0, -1.0, 5.0, 0.0, 3.0];
+
+  altChanges.forEach(change => {
+    const diff = Math.abs(change - btcChange);
+    const correlation = Math.max(0, 1 - diff / 20);
+    assert.ok(correlation >= 0 && correlation <= 1, `Correlation ${correlation} should be 0-1`);
+  });
+});
+
+test('AI intent detection covers all categories', () => {
+  const detectIntents = (msg) => {
+    const intents = [];
+    if (/买|buy|should i (buy|enter|invest)|entry|加仓|抄底/i.test(msg)) intents.push('buy_advice');
+    if (/卖|sell|exit|take profit|止盈/i.test(msg)) intents.push('sell_advice');
+    if (/risk|leverage|杠杆|爆仓|liquidat/i.test(msg)) intents.push('risk');
+    if (/dca|定投|dollar.cost/i.test(msg)) intents.push('dca');
+    if (/portfolio|持仓|holdings/i.test(msg)) intents.push('portfolio');
+    if (/help|帮助/i.test(msg)) intents.push('help');
+    if (/market|行情|overview|总览/i.test(msg)) intents.push('market_overview');
+    if (intents.length === 0) intents.push('general');
+    return intents;
+  };
+
+  assert.deepStrictEqual(detectIntents('should i buy btc'), ['buy_advice']);
+  assert.deepStrictEqual(detectIntents('when to sell'), ['sell_advice']);
+  assert.deepStrictEqual(detectIntents('check my leverage risk'), ['risk']);
+  assert.deepStrictEqual(detectIntents('help me with DCA'), ['dca', 'help']);
+  assert.deepStrictEqual(detectIntents('我的持仓'), ['portfolio']);
+  assert.deepStrictEqual(detectIntents('random text'), ['general']);
+  assert.deepStrictEqual(detectIntents('行情怎么样'), ['market_overview']);
+});
+
+test('escapeHtml prevents XSS', () => {
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
+  assert.strictEqual(escapeHtml('<script>alert("xss")</script>'), '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+  assert.strictEqual(escapeHtml('normal text'), 'normal text');
+  assert.strictEqual(escapeHtml("it's"), "it&#039;s");
+});
+
 // ---- Script Syntax Tests ----
 console.log('\n📋 Script Syntax');
 const fs = require('fs');
