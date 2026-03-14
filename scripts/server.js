@@ -8,6 +8,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { getLogger, createLogger } = require('./logger');
 const { fetchMarketData, fetchFearGreedIndex, fetchMultiplePrices, fetchFundingRates, fetchKlines } = require('./api-client');
 const db = require('./db');
@@ -33,7 +34,7 @@ function setCache(key, data, ttl) {
 }
 
 // Clean stale cache entries every 60s
-setInterval(() => {
+const _cacheCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of apiCache) {
     if (now - entry.time > entry.ttl * 3) apiCache.delete(key);
@@ -92,7 +93,7 @@ function cleanRateLimiter() {
 }
 
 // Clean up rate limiter periodically
-setInterval(cleanRateLimiter, 60000);
+const _rateLimitCleanupTimer = setInterval(cleanRateLimiter, 60000);
 
 // ---- Metrics ----
 const metrics = {
@@ -219,7 +220,7 @@ async function handleMarket(req, res) {
     log.error('Market data error', { error: err.message });
     metrics.errors++;
     // Fallback to demo data
-    sendJSON(res, 200, { ok: true, demo: true, data: DEMO_DATA.market });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', data: DEMO_DATA.market });
   }
 }
 
@@ -255,7 +256,7 @@ async function handleSentiment(req, res) {
     log.error('Sentiment data error', { error: err.message });
     metrics.errors++;
     // Fallback to demo data
-    sendJSON(res, 200, { ok: true, demo: true, ...DEMO_DATA.fearGreed, history: [] });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', ...DEMO_DATA.fearGreed, history: [] });
   }
 }
 
@@ -292,7 +293,7 @@ async function handleSentimentAnalysis(req, res) {
   } catch (err) {
     log.error('Sentiment analysis error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 200, { ok: true, demo: true, signal: 'hold', analysis: 'Demo mode — connect to internet for live analysis.', fearGreed: 45, btcTrend: 'up', btcPrice: DEMO_DATA.prices.BTC, btcAvg: DEMO_DATA.prices.BTC * 0.98 });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', signal: 'hold', analysis: 'Demo mode — connect to internet for live analysis.', fearGreed: 45, btcTrend: 'up', btcPrice: DEMO_DATA.prices.BTC, btcAvg: DEMO_DATA.prices.BTC * 0.98 });
   }
 }
 
@@ -330,7 +331,7 @@ async function handleCorrelation(req, res) {
     metrics.errors++;
     // Demo fallback
     const demoCorr = ['ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA'].map(s => ({ symbol: s, correlation: 0.5 + Math.random() * 0.4, level: 'moderate', change24h: (Math.random() - 0.3) * 5 }));
-    sendJSON(res, 200, { ok: true, demo: true, correlations: demoCorr, btcChange: 2.34 });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', correlations: demoCorr, btcChange: 2.34 });
   }
 }
 
@@ -362,7 +363,7 @@ async function handleKlines(req, res) {
   } catch (err) {
     log.error('Klines error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 200, { ok: true, demo: true, data: DEMO_DATA.klines });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', data: DEMO_DATA.klines });
   }
 }
 
@@ -880,7 +881,7 @@ function handleSSE(req, res) {
 }
 
 // SSE heartbeat every 30s to prevent proxy timeouts
-setInterval(() => {
+const _heartbeatTimer = setInterval(() => {
   for (const client of sseClients) {
     try { client.write(':heartbeat\n\n'); } catch { sseClients.delete(client); }
   }
@@ -890,8 +891,8 @@ setInterval(() => {
 let _sseBroadcasting = false;
 let _lastPrices = {}; // Store latest prices for alert checking
 
-setInterval(async () => {
-  if (_sseBroadcasting) return;
+const _broadcastTimer = setInterval(async () => {
+  if (_sseBroadcasting || sseClients.size === 0) return;
   _sseBroadcasting = true;
   try {
     const symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX'];
@@ -952,9 +953,9 @@ function checkAlertsAgainstPrices(prices) {
 function handleLatestPrices(req, res) {
   if (Object.keys(_lastPrices).length === 0) {
     // Return demo data when no live prices available
-    sendJSON(res, 200, { ok: true, demo: true, prices: DEMO_DATA.prices });
+    sendJSON(res, 200, { ok: true, degraded: true, source: 'demo', prices: DEMO_DATA.prices });
   } else {
-    sendJSON(res, 200, { ok: true, demo: false, prices: _lastPrices });
+    sendJSON(res, 200, { ok: true, degraded: false, source: 'live', prices: _lastPrices });
   }
 }
 
@@ -1010,6 +1011,8 @@ const routes = {
 // ---- Server ----
 const server = http.createServer(async (req, res) => {
   metrics.requests++;
+  const requestId = crypto.randomUUID();
+  res.setHeader('X-Request-ID', requestId);
 
   // Only trust X-Forwarded-For when behind a trusted proxy
   const trustProxy = config.server.trustProxy || false;
@@ -1064,6 +1067,18 @@ function shutdown(signal) {
   isShuttingDown = true;
 
   log.info(`Received ${signal}, starting graceful shutdown...`);
+
+  // Clear all intervals to prevent work during shutdown
+  clearInterval(_cacheCleanupTimer);
+  clearInterval(_rateLimitCleanupTimer);
+  clearInterval(_heartbeatTimer);
+  clearInterval(_broadcastTimer);
+
+  // Drain SSE clients gracefully
+  for (const client of sseClients) {
+    try { client.write('event: shutdown\ndata: {}\n\n'); client.end(); } catch {}
+  }
+  sseClients.clear();
 
   // Stop accepting new connections
   server.close(() => {

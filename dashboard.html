@@ -1567,7 +1567,7 @@ Ask me anything about cryptocurrency markets, for example:
     // ─── Demo Mode Detection ──────────────────────────────────────────────────
     let isDemoMode = false;
     function checkDemoMode(response) {
-      if (response && response.demo) {
+      if (response && (response.demo || response.degraded)) {
         if (!isDemoMode) {
           isDemoMode = true;
           document.getElementById('demo-banner').classList.add('active');
