@@ -43,7 +43,9 @@ const _cacheCleanupTimer = setInterval(() => {
 
 // ---- Allowed static file extensions ----
 const ALLOWED_STATIC_DIRS = new Set(['', 'nginx', 'docs']);
-const SENSITIVE_PATHS = ['/config/', '/data/', '/logs/', '/.env', '/.git', '/scripts/'];
+const SENSITIVE_PATHS = ['/config/', '/data/', '/logs/', '/.env', '/.git', '/scripts/', '/.claude',
+  '/package.json', '/package-lock.json', '/docker-compose.yml', '/dockerfile',
+  '/ecosystem.config.js', '/deploy.sh', '/.dockerignore', '/claude.md'];
 
 let config;
 try {
@@ -131,27 +133,13 @@ function sendJSON(res, statusCode, data) {
 }
 
 async function handleHealth(req, res) {
-  const uptime = Math.floor((Date.now() - metrics.startTime) / 1000);
-  const memUsage = process.memoryUsage();
-
-  const health = {
+  metrics.lastHealthCheck = new Date().toISOString();
+  sendJSON(res, 200, {
     status: 'ok',
     version: PKG_VERSION,
-    uptime,
+    uptime: Math.floor((Date.now() - metrics.startTime) / 1000),
     timestamp: new Date().toISOString(),
-    memory: {
-      rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
-      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
-      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB',
-    },
-    metrics: {
-      totalRequests: metrics.requests,
-      totalErrors: metrics.errors,
-    },
-  };
-
-  metrics.lastHealthCheck = new Date().toISOString();
-  sendJSON(res, 200, health);
+  });
 }
 
 // Cached readiness result (TTL 30s to avoid hitting Binance on every k8s probe)

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AlphaMind Lite | AI Crypto Trading Dashboard</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #0b0e17;
@@ -1603,10 +1603,12 @@ Ask me anything about cryptocurrency markets, for example:
       zh: { dashboard: '仪表盘', market: '行情', portfolio: '投资组合', sentiment: '市场情绪', risk: '风险控制', tools: '工具', ai: 'AI 对话' },
     };
     function setLang(lang) {
+      if (!i18n[lang]) return; // Validate against known languages
       document.querySelectorAll('.lang-toggle button').forEach(b => b.classList.remove('active'));
-      document.querySelector(`.lang-toggle button[onclick="setLang('${lang}')"]`).classList.add('active');
+      document.querySelectorAll('.lang-toggle button').forEach(b => {
+        if (b.textContent.trim() === (lang === 'en' ? 'EN' : '中文')) b.classList.add('active');
+      });
       const t = i18n[lang];
-      if (!t) return;
       const navItems = document.querySelectorAll('.nav-item .nav-text');
       const keys = Object.keys(t);
       navItems.forEach((el, i) => { if (keys[i] && t[keys[i]]) el.textContent = t[keys[i]]; });
