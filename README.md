@@ -194,8 +194,10 @@ node server.js
 | POST | `/api/risk` | 仓位风险计算 |
 | POST | `/api/dca` | 定投收益模拟 |
 | POST | `/api/ai-chat` | AI 智能对话 |
-| GET | `/api/bsc` | BSC 链上数据（Gas/BNB/生态代币） |
-| GET | `/api/indicators?symbol=BTC` | 技术指标（RSI/MACD/布林带） |
+| GET | `/api/bsc` | BSC 链数据（Gas/BNB 销毁/质押/生态） |
+| GET | `/api/indicators?symbol=BTC` | 技术指标（RSI/MACD/布林带/SMA） |
+| GET | `/api/multi-timeframe?symbol=BTC` | 多时间框架融合分析（1H/4H/1D） |
+| POST | `/api/paper-trade` | 模拟交易（虚拟 $10K USDT） |
 | GET | `/api/funding` | 永续合约资金费率 |
 | GET | `/api/stream` | SSE 实时价格推送 |
 | GET | `/health` | 服务健康检查 |
