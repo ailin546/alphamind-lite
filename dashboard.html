@@ -489,8 +489,12 @@
     .toast-alert { background: linear-gradient(135deg, #ff4081, #ff6e40); }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     /* Demo banner */
-    .demo-banner { background: linear-gradient(90deg, #ff4081, #7c4dff); color: #fff; text-align: center; padding: 6px; font-size: 0.8em; display: none; }
-    .demo-banner.active { display: block; }
+    .demo-banner { background: linear-gradient(90deg, #ff4081, #7c4dff); color: #fff; text-align: center; padding: 8px 16px; font-size: 0.85em; display: none; font-weight: 500; letter-spacing: 0.3px; }
+    .demo-banner.active { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .live-indicator { display: none; padding: 4px 12px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+    .live-indicator.show { display: inline-flex; align-items: center; gap: 4px; }
+    .live-indicator.live { background: rgba(0,230,118,0.15); color: var(--up); }
+    .live-indicator.demo { background: rgba(255,64,129,0.15); color: var(--accent); }
     /* Welcome overlay */
     .welcome-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10000; display: flex; align-items: center; justify-content: center; }
     .welcome-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 500px; text-align: center; }
@@ -506,7 +510,7 @@
 </head>
 <body>
   <div class="toast-container" id="toast-container" aria-live="polite" role="status"></div>
-  <div class="demo-banner" id="demo-banner">Demo Mode — showing sample data. Connect to internet for live Binance data.</div>
+  <div class="demo-banner" id="demo-banner"><span class="status-dot demo"></span>Demo Mode — showing sample data. Connect to internet for live Binance data.</div>
   <a href="#main-content" class="sr-only" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:999;padding:8px 16px;background:var(--primary);color:#000;text-decoration:none;font-weight:600" onfocus="this.style.left='16px';this.style.top='16px';this.style.width='auto';this.style.height='auto'" onblur="this.style.left='-9999px'">Skip to main content</a>
   <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
 
@@ -555,6 +559,7 @@
         <div class="header">
           <h2>Dashboard</h2>
           <div class="header-actions">
+            <span class="live-indicator" id="data-status-indicator"></span>
             <span class="last-update" id="dash-update"></span>
             <button class="btn" onclick="loadDashboard()">Refresh</button>
           </div>
@@ -905,6 +910,39 @@
           </div>
           <div id="calc-result"></div>
         </div>
+
+        <!-- Paper Trading Simulator -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">Paper Trading Simulator (Virtual $10,000 USDT)</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div>
+              <span style="color:var(--text-dim)">Balance: </span>
+              <span id="paper-balance" style="font-size:1.3em;font-weight:700">$10,000.00</span>
+            </div>
+            <button class="btn" onclick="resetPaperTrading()" style="font-size:0.8em">Reset to $10K</button>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Coin</label>
+              <select id="paper-symbol" class="form-input">
+                <option>BTC</option><option>ETH</option><option>BNB</option><option>SOL</option><option>XRP</option><option>DOGE</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quantity</label>
+              <input type="number" id="paper-qty" class="form-input" placeholder="e.g. 0.01" step="any">
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
+              <button class="btn" onclick="paperTrade('buy')" style="width:50%;background:var(--up);color:#000;border-color:var(--up);font-weight:600">Buy</button>
+              <button class="btn" onclick="paperTrade('sell')" style="width:50%;background:var(--down);color:#fff;border-color:var(--down);font-weight:600">Sell</button>
+            </div>
+          </div>
+          <div id="paper-result" style="margin-top:8px"></div>
+          <div style="margin-top:12px">
+            <div class="card-title" style="font-size:0.75em">Recent Trades</div>
+            <div id="paper-trades" style="max-height:200px;overflow-y:auto;font-size:0.85em;color:var(--text-dim)">No trades yet — start trading!</div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ AI CHAT PAGE ═══ -->
@@ -959,7 +997,25 @@ Ask me anything about cryptocurrency markets, for example:
           <div class="stat-card">
             <div class="stat-label">Market Cap</div>
             <div class="stat-value" id="bsc-mcap">--</div>
-            <div class="stat-change" style="color:var(--text-dim)">Total Supply: ~146M BNB</div>
+            <div class="stat-change" id="bsc-supply" style="color:var(--text-dim)">Total Supply: ~146M BNB</div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top:16px">
+          <div class="stat-card">
+            <div class="stat-label">BNB Staking APY</div>
+            <div class="stat-value up" id="bsc-staking-apy">--</div>
+            <div class="stat-change" style="color:var(--text-dim)">Validator staking rewards</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total BNB Burned</div>
+            <div class="stat-value" id="bsc-burned" style="color:var(--warning)">--</div>
+            <div class="stat-change" id="bsc-burn-pct" style="color:var(--text-dim)">Quarterly auto-burn</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">BSC DeFi Protocols</div>
+            <div class="stat-value" id="bsc-defi-count">1,500+</div>
+            <div class="stat-change" id="bsc-top-defi" style="color:var(--text-dim)">PancakeSwap, Venus, Alpaca...</div>
           </div>
         </div>
 
@@ -1074,6 +1130,7 @@ Ask me anything about cryptocurrency markets, for example:
       else if (name === 'sentiment') loadSentiment();
       else if (name === 'portfolio') renderHoldings();
       else if (name === 'risk') renderAlerts();
+      else if (name === 'tools') loadPaperTrades();
       else if (name === 'bsc') loadBSCData();
     }
 
@@ -1679,6 +1736,54 @@ Ask me anything about cryptocurrency markets, for example:
       `;
     }
 
+    // ─── Paper Trading ────────────────────────────────────────────────────────
+    async function paperTrade(side) {
+      const symbol = document.getElementById('paper-symbol').value;
+      const qty = parseFloat(document.getElementById('paper-qty').value);
+      if (!qty || qty <= 0) return showToast('Enter a valid quantity', 'error');
+
+      try {
+        const r = await api('/api/paper-trade', { body: { symbol, side, quantity: qty } });
+        document.getElementById('paper-balance').textContent = fmtUSD(r.balance);
+        document.getElementById('paper-result').innerHTML = `<div style="padding:8px;border-radius:8px;background:${side === 'buy' ? 'rgba(0,230,118,0.1)' : 'rgba(255,82,82,0.1)'}">${side.toUpperCase()} ${qty} ${symbol} @ ${fmtUSD(r.trade.price)} = ${fmtUSD(r.trade.cost)}</div>`;
+        showToast(`Paper ${side}: ${qty} ${symbol}`, side === 'buy' ? 'success' : 'info');
+        loadPaperTrades();
+      } catch (err) {
+        showToast('Trade failed: ' + err.message, 'error');
+      }
+    }
+
+    async function loadPaperTrades() {
+      try {
+        const r = await api('/api/paper-trade');
+        document.getElementById('paper-balance').textContent = fmtUSD(r.balance);
+        if (r.trades.length === 0) {
+          document.getElementById('paper-trades').innerHTML = 'No trades yet — start trading!';
+          return;
+        }
+        document.getElementById('paper-trades').innerHTML = r.trades.slice(-10).reverse().map(t =>
+          `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
+            <span class="${t.side === 'buy' ? 'up' : 'down'}" style="font-weight:600">${t.side.toUpperCase()}</span>
+            <span>${t.quantity} ${t.symbol}</span>
+            <span>${fmtUSD(t.price)}</span>
+            <span style="color:var(--text-dim)">${new Date(t.createdAt).toLocaleTimeString()}</span>
+          </div>`
+        ).join('');
+      } catch {}
+    }
+
+    async function resetPaperTrading() {
+      try {
+        await api('/api/paper-trade/reset', { body: {} });
+        document.getElementById('paper-balance').textContent = '$10,000.00';
+        document.getElementById('paper-trades').innerHTML = 'No trades yet — start trading!';
+        document.getElementById('paper-result').innerHTML = '';
+        showToast('Paper trading reset to $10,000', 'success');
+      } catch (err) {
+        showToast('Reset failed', 'error');
+      }
+    }
+
     // ─── BSC Chain Data ──────────────────────────────────────────────────────
     async function loadBSCData() {
       try {
@@ -1699,6 +1804,18 @@ Ask me anything about cryptocurrency markets, for example:
         }
         if (bsc.bnb && bsc.bnb.marketCap) {
           document.getElementById('bsc-mcap').textContent = '$' + fmt(bsc.bnb.marketCap / 1e9, 1) + 'B';
+          if (bsc.bnb.circulatingSupply) document.getElementById('bsc-supply').textContent = 'Circulating: ' + fmt(bsc.bnb.circulatingSupply, 0) + ' BNB';
+        }
+        if (bsc.bnb && bsc.bnb.stakingAPY) {
+          document.getElementById('bsc-staking-apy').textContent = bsc.bnb.stakingAPY + '%';
+        }
+        if (bsc.bnb && bsc.bnb.burnedTotal) {
+          document.getElementById('bsc-burned').textContent = fmt(bsc.bnb.burnedTotal, 0) + ' BNB';
+          document.getElementById('bsc-burn-pct').textContent = bsc.bnb.burnRatePercent + '% of original supply burned';
+        }
+        if (bsc.defi) {
+          document.getElementById('bsc-defi-count').textContent = fmt(bsc.defi.totalProtocols, 0) + '+';
+          document.getElementById('bsc-top-defi').textContent = bsc.defi.topProtocols.join(', ');
         }
 
         // Ecosystem tokens
@@ -1854,11 +1971,15 @@ Ask me anything about cryptocurrency markets, for example:
     // ─── Demo Mode Detection ──────────────────────────────────────────────────
     let isDemoMode = false;
     function checkDemoMode(response) {
+      const indicator = document.getElementById('data-status-indicator');
       if (response && (response.demo || response.degraded)) {
         if (!isDemoMode) {
           isDemoMode = true;
           document.getElementById('demo-banner').classList.add('active');
         }
+        if (indicator) { indicator.className = 'live-indicator show demo'; indicator.innerHTML = '<span class="status-dot demo"></span>Demo'; }
+      } else if (response && !isDemoMode) {
+        if (indicator) { indicator.className = 'live-indicator show live'; indicator.innerHTML = '<span class="status-dot live"></span>Live'; }
       }
     }
 
