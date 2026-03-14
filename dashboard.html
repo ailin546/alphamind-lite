@@ -1228,7 +1228,7 @@ Ask me anything about cryptocurrency markets, for example:
           if (c.error) continue;
           const cls = c.change24h >= 0 ? 'up' : 'down';
           html += `<tr>
-            <td><div class="coin-name"><div class="coin-icon">${c.symbol.slice(0,2)}</div>${c.symbol}</div></td>
+            <td><div class="coin-name"><div class="coin-icon">${escapeHtml(c.symbol.slice(0,2))}</div>${escapeHtml(c.symbol)}</div></td>
             <td>${fmtUSD(c.price)}</td>
             <td class="${cls}">${fmtPct(c.change24h)}</td>
             <td>${fmtUSD(c.high24h)}</td>
@@ -1640,7 +1640,7 @@ Ask me anything about cryptocurrency markets, for example:
           const pct = c.correlation != null ? Math.abs(c.correlation) * 100 : 0;
           const color = c.level === 'very_high' ? '#ff5252' : c.level === 'high' ? '#ff9800' : c.level === 'moderate' ? '#ffeb3b' : c.level === 'low' ? '#00e676' : '#00b0ff';
           html += `<div class="corr-item">
-            <div><strong>${c.symbol}</strong><br><small style="color:var(--text-dim)">${c.correlation != null ? c.correlation.toFixed(3) : 'N/A'}</small></div>
+            <div><strong>${escapeHtml(c.symbol)}</strong><br><small style="color:var(--text-dim)">${c.correlation != null ? c.correlation.toFixed(3) : 'N/A'}</small></div>
             <div class="corr-bar"><div class="corr-fill" style="width:${pct}%;background:${color}"></div></div>
           </div>`;
         }
@@ -1791,7 +1791,7 @@ Ask me anything about cryptocurrency markets, for example:
         document.getElementById('paper-trades').innerHTML = r.trades.slice(-10).reverse().map(t =>
           `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
             <span class="${t.side === 'buy' ? 'up' : 'down'}" style="font-weight:600">${t.side.toUpperCase()}</span>
-            <span>${t.quantity} ${t.symbol}</span>
+            <span>${t.quantity} ${escapeHtml(t.symbol)}</span>
             <span>${fmtUSD(t.price)}</span>
             <span style="color:var(--text-dim)">${new Date(t.createdAt).toLocaleTimeString()}</span>
           </div>`
@@ -1854,7 +1854,7 @@ Ask me anything about cryptocurrency markets, for example:
         if (bsc.ecosystem && bsc.ecosystem.length > 0) {
           const tbody = document.getElementById('bsc-tokens-body');
           tbody.innerHTML = bsc.ecosystem.map(t => `<tr>
-            <td><span class="coin-name"><span class="coin-icon">${t.symbol.charAt(0)}</span>${t.symbol}</span></td>
+            <td><span class="coin-name"><span class="coin-icon">${escapeHtml(t.symbol.charAt(0))}</span>${escapeHtml(t.symbol)}</span></td>
             <td>${fmtUSD(t.price)}</td>
             <td class="${t.change24h >= 0 ? 'up' : 'down'}">${fmtPct(t.change24h)}</td>
           </tr>`).join('');
