@@ -459,17 +459,45 @@
     .signal-buy { background: rgba(0,230,118,0.15); color: var(--up); }
     .signal-sell { background: rgba(255,82,82,0.15); color: var(--down); }
     .signal-hold { background: rgba(255,171,0,0.15); color: var(--warning); }
+    /* Toast notifications */
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast { padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 0.85em; animation: slideIn 0.3s ease; max-width: 380px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .toast-success { background: rgba(0,230,118,0.9); }
+    .toast-error { background: rgba(255,82,82,0.9); }
+    .toast-warning { background: rgba(255,171,0,0.9); color: #000; }
+    .toast-alert { background: linear-gradient(135deg, #ff4081, #ff6e40); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    /* Demo banner */
+    .demo-banner { background: linear-gradient(90deg, #ff4081, #7c4dff); color: #fff; text-align: center; padding: 6px; font-size: 0.8em; display: none; }
+    .demo-banner.active { display: block; }
+    /* Welcome overlay */
+    .welcome-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+    .welcome-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 500px; text-align: center; }
+    .welcome-card h2 { font-size: 1.5em; background: linear-gradient(135deg, var(--primary), var(--secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+    .welcome-card p { color: var(--text-dim); margin-bottom: 8px; font-size: 0.9em; }
+    .welcome-card .features { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; text-align: left; }
+    .welcome-card .features div { padding: 8px 12px; background: var(--bg); border-radius: 8px; font-size: 0.8em; }
+    /* Language toggle */
+    .lang-toggle { display: inline-flex; gap: 2px; background: var(--bg); border-radius: 6px; padding: 2px; margin-left: 8px; }
+    .lang-toggle button { border: none; background: none; color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7em; }
+    .lang-toggle button.active { background: var(--primary); color: #000; }
   </style>
 </head>
 <body>
-  <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">&#9776;</button>
+  <div class="toast-container" id="toast-container"></div>
+  <div class="demo-banner" id="demo-banner">Demo Mode — showing sample data. Connect to internet for live Binance data.</div>
+  <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
 
   <div class="app">
     <!-- Sidebar -->
-    <nav class="sidebar">
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
       <div class="sidebar-logo">
         <h1>AlphaMind Lite</h1>
-        <small>AI Trading Partner v9.0</small>
+        <small>AI Trading Partner v10.0</small>
+        <div class="lang-toggle">
+          <button class="active" onclick="setLang('en')">EN</button>
+          <button onclick="setLang('zh')">中文</button>
+        </div>
       </div>
       <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
         <span class="nav-icon">&#128202;</span> Dashboard
@@ -1433,8 +1461,117 @@ Ask me anything about cryptocurrency markets, for example:
               .replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>');
     }
 
+    // ─── Toast Notifications ─────────────────────────────────────────────────
+    function showToast(message, type = 'success', duration = 4000) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, duration);
+    }
+
+    // ─── SSE Connection + Alert Listener ──────────────────────────────────────
+    let sseSource = null;
+    function connectSSE() {
+      if (sseSource) sseSource.close();
+      sseSource = new EventSource('/api/stream');
+      sseSource.addEventListener('connected', () => { console.log('SSE connected'); });
+      sseSource.addEventListener('prices', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          // Update dashboard stat cards if on dashboard page
+          const btc = data.find(d => d.symbol === 'BTC');
+          const eth = data.find(d => d.symbol === 'ETH');
+          if (btc) {
+            const el = document.getElementById('dash-btc-price');
+            if (el) el.textContent = fmtUSD(btc.price);
+          }
+          if (eth) {
+            const el = document.getElementById('dash-eth-price');
+            if (el) el.textContent = fmtUSD(eth.price);
+          }
+        } catch {}
+      });
+      sseSource.addEventListener('alert', (e) => {
+        try {
+          const alerts = JSON.parse(e.data);
+          alerts.forEach(a => {
+            const msg = `Alert: ${a.symbol} is ${a.direction} $${fmt(a.price)} (now $${fmt(a.currentPrice)})`;
+            showToast(msg, 'alert', 10000);
+            // Browser notification
+            if (Notification.permission === 'granted') {
+              new Notification('AlphaMind Alert', { body: msg, icon: '/favicon.ico' });
+            }
+          });
+        } catch {}
+      });
+      sseSource.onerror = () => { setTimeout(connectSSE, 5000); };
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    // ─── Demo Mode Detection ──────────────────────────────────────────────────
+    let isDemoMode = false;
+    function checkDemoMode(response) {
+      if (response && response.demo) {
+        if (!isDemoMode) {
+          isDemoMode = true;
+          document.getElementById('demo-banner').classList.add('active');
+        }
+      }
+    }
+
+    // ─── Welcome Screen ───────────────────────────────────────────────────────
+    function showWelcome() {
+      if (localStorage.getItem('am_welcomed')) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'welcome-overlay';
+      overlay.innerHTML = `<div class="welcome-card">
+        <h2>Welcome to AlphaMind Lite</h2>
+        <p>Your AI-powered crypto trading assistant</p>
+        <div class="features">
+          <div>📊 Real-time Market Data</div>
+          <div>🛡️ Risk Calculator</div>
+          <div>📈 Portfolio Tracking</div>
+          <div>🤖 AI Chat Assistant</div>
+          <div>😱 Fear & Greed Index</div>
+          <div>💰 DCA Simulator</div>
+        </div>
+        <p style="color:var(--text);margin-top:12px">Start by exploring the <strong>Dashboard</strong> or add coins to your <strong>Portfolio</strong></p>
+        <button class="btn" style="margin-top:16px;padding:10px 32px;font-size:1em;cursor:pointer;background:var(--primary);color:#000;border:none;border-radius:8px;font-weight:600" onclick="this.parentElement.parentElement.remove();localStorage.setItem('am_welcomed','1')">Get Started</button>
+      </div>`;
+      document.body.appendChild(overlay);
+    }
+
+    // ─── i18n (basic) ─────────────────────────────────────────────────────────
+    const i18n = {
+      en: { dashboard: 'Dashboard', market: 'Market', portfolio: 'Portfolio', sentiment: 'Sentiment', risk: 'Risk Control', tools: 'Tools', ai: 'AI Chat' },
+      zh: { dashboard: '仪表盘', market: '行情', portfolio: '投资组合', sentiment: '市场情绪', risk: '风险控制', tools: '工具', ai: 'AI 对话' },
+    };
+    function setLang(lang) {
+      document.querySelectorAll('.lang-toggle button').forEach(b => b.classList.remove('active'));
+      document.querySelector(`.lang-toggle button[onclick="setLang('${lang}')"]`).classList.add('active');
+      const t = i18n[lang];
+      if (!t) return;
+      const navItems = document.querySelectorAll('.nav-item .nav-text');
+      const keys = Object.keys(t);
+      navItems.forEach((el, i) => { if (keys[i] && t[keys[i]]) el.textContent = t[keys[i]]; });
+      localStorage.setItem('am_lang', lang);
+    }
+
     // ─── Init ────────────────────────────────────────────────────────────────
+    showWelcome();
     loadDashboard();
+    connectSSE();
+
+    // Restore language
+    const savedLang = localStorage.getItem('am_lang');
+    if (savedLang && savedLang !== 'en') setLang(savedLang);
+
     // Auto-refresh every 30 seconds
     setInterval(() => {
       const activePage = document.querySelector('.page.active');

@@ -218,7 +218,8 @@ async function handleMarket(req, res) {
   } catch (err) {
     log.error('Market data error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to fetch market data' });
+    // Fallback to demo data
+    sendJSON(res, 200, { ok: true, demo: true, data: DEMO_DATA.market });
   }
 }
 
@@ -253,7 +254,8 @@ async function handleSentiment(req, res) {
   } catch (err) {
     log.error('Sentiment data error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to fetch sentiment data' });
+    // Fallback to demo data
+    sendJSON(res, 200, { ok: true, demo: true, ...DEMO_DATA.fearGreed, history: [] });
   }
 }
 
@@ -290,7 +292,7 @@ async function handleSentimentAnalysis(req, res) {
   } catch (err) {
     log.error('Sentiment analysis error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to analyze sentiment' });
+    sendJSON(res, 200, { ok: true, demo: true, signal: 'hold', analysis: 'Demo mode — connect to internet for live analysis.', fearGreed: 45, btcTrend: 'up', btcPrice: DEMO_DATA.prices.BTC, btcAvg: DEMO_DATA.prices.BTC * 0.98 });
   }
 }
 
@@ -326,7 +328,9 @@ async function handleCorrelation(req, res) {
   } catch (err) {
     log.error('Correlation error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to calculate correlations' });
+    // Demo fallback
+    const demoCorr = ['ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA'].map(s => ({ symbol: s, correlation: 0.5 + Math.random() * 0.4, level: 'moderate', change24h: (Math.random() - 0.3) * 5 }));
+    sendJSON(res, 200, { ok: true, demo: true, correlations: demoCorr, btcChange: 2.34 });
   }
 }
 
@@ -358,7 +362,7 @@ async function handleKlines(req, res) {
   } catch (err) {
     log.error('Klines error', { error: err.message });
     metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to fetch klines' });
+    sendJSON(res, 200, { ok: true, demo: true, data: DEMO_DATA.klines });
   }
 }
 
@@ -406,17 +410,35 @@ async function handleDCA(req, res) {
     const m = parseInt(months);
     if (isNaN(monthly) || monthly <= 0 || isNaN(m) || m <= 0 || m > 120) return sendJSON(res, 400, { error: 'Invalid values' });
 
-    const marketData = await fetchMarketData(`${symbol.toUpperCase()}USDT`);
-    const currentPrice = parseFloat(marketData.lastPrice);
+    let currentPrice;
+    try {
+      const marketData = await fetchMarketData(`${symbol.toUpperCase()}USDT`);
+      currentPrice = parseFloat(marketData.lastPrice);
+    } catch {
+      currentPrice = DEMO_DATA.prices[symbol.toUpperCase()] || 0;
+    }
+    if (!currentPrice) return sendJSON(res, 400, { error: 'Unable to fetch price for this symbol' });
+
     const totalInvested = monthly * m;
-    const totalCoins = totalInvested / currentPrice;
+    // Simulate DCA with price volatility (±15% random walk)
+    let totalCoins = 0;
+    const entries = [];
+    for (let i = 0; i < m; i++) {
+      const volatility = 1 + (Math.sin(i * 0.8) * 0.1 + (Math.random() - 0.5) * 0.05);
+      const monthPrice = currentPrice * volatility;
+      const coins = monthly / monthPrice;
+      totalCoins += coins;
+      entries.push({ month: i + 1, price: monthPrice, coins });
+    }
+    const avgPrice = totalInvested / totalCoins;
     const currentValue = totalCoins * currentPrice;
     const profit = currentValue - totalInvested;
     const profitPercent = (profit / totalInvested) * 100;
 
     sendJSON(res, 200, {
       ok: true, symbol: symbol.toUpperCase(), currentPrice,
-      totalInvested, totalCoins, currentValue, profit, profitPercent,
+      totalInvested, totalCoins, currentValue, profit, profitPercent, avgPrice,
+      note: 'Simulated DCA with estimated price volatility. Actual results will vary.',
     });
   } catch (err) {
     sendJSON(res, 400, { error: 'Failed to calculate DCA' });
@@ -720,12 +742,13 @@ setInterval(() => {
 
 // Broadcast prices every 15s to SSE clients (with overlap guard)
 let _sseBroadcasting = false;
+let _lastPrices = {}; // Store latest prices for alert checking
 
 setInterval(async () => {
-  if (sseClients.size === 0 || _sseBroadcasting) return;
+  if (_sseBroadcasting) return;
   _sseBroadcasting = true;
   try {
-    const symbols = ['BTC', 'ETH', 'BNB', 'SOL'];
+    const symbols = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX'];
     const results = await Promise.all(
       symbols.map(s => fetchMarketData(`${s}USDT`).then(d => ({
         symbol: s,
@@ -734,14 +757,84 @@ setInterval(async () => {
       })).catch(() => null))
     );
     const data = results.filter(Boolean);
-    const msg = `event: prices\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const client of sseClients) {
-      try { client.write(msg); } catch { sseClients.delete(client); }
+
+    // Update price cache for alert checking
+    data.forEach(d => { _lastPrices[d.symbol] = d.price; });
+
+    // Check alerts against live prices
+    const triggeredAlerts = checkAlertsAgainstPrices(_lastPrices);
+
+    // Broadcast to SSE clients
+    if (sseClients.size > 0) {
+      const priceMsg = `event: prices\ndata: ${JSON.stringify(data)}\n\n`;
+      for (const client of sseClients) {
+        try { client.write(priceMsg); } catch { sseClients.delete(client); }
+      }
+      // Send triggered alerts
+      if (triggeredAlerts.length > 0) {
+        const alertMsg = `event: alert\ndata: ${JSON.stringify(triggeredAlerts)}\n\n`;
+        for (const client of sseClients) {
+          try { client.write(alertMsg); } catch { sseClients.delete(client); }
+        }
+      }
     }
   } catch {} finally {
     _sseBroadcasting = false;
   }
 }, 15000);
+
+// Check all alerts against current prices
+function checkAlertsAgainstPrices(prices) {
+  const alerts = db.getAlerts().filter(a => !a.triggered);
+  const triggered = [];
+  for (const alert of alerts) {
+    const price = prices[alert.symbol];
+    if (!price) continue;
+    const shouldTrigger =
+      (alert.direction === 'above' && price >= alert.price) ||
+      (alert.direction === 'below' && price <= alert.price);
+    if (shouldTrigger) {
+      db.triggerAlert(alert.id);
+      triggered.push({ ...alert, currentPrice: price, triggeredAt: new Date().toISOString() });
+      log.info('Alert triggered', { symbol: alert.symbol, direction: alert.direction, target: alert.price, current: price });
+    }
+  }
+  return triggered;
+}
+
+// ---- Get Latest Prices API (for offline/demo mode) ----
+function handleLatestPrices(req, res) {
+  if (Object.keys(_lastPrices).length === 0) {
+    // Return demo data when no live prices available
+    sendJSON(res, 200, { ok: true, demo: true, prices: DEMO_DATA.prices });
+  } else {
+    sendJSON(res, 200, { ok: true, demo: false, prices: _lastPrices });
+  }
+}
+
+// ---- Demo/Fallback Data (when APIs are unreachable) ----
+const DEMO_DATA = {
+  prices: { BTC: 67542.30, ETH: 3456.78, BNB: 612.45, SOL: 178.92, XRP: 0.62, DOGE: 0.185, ADA: 0.48, AVAX: 38.75 },
+  market: [
+    { symbol: 'BTC', price: 67542.30, change24h: 2.34, high24h: 68100, low24h: 65800, volume24h: 28500000000 },
+    { symbol: 'ETH', price: 3456.78, change24h: 1.56, high24h: 3520, low24h: 3380, volume24h: 15200000000 },
+    { symbol: 'BNB', price: 612.45, change24h: -0.82, high24h: 625, low24h: 605, volume24h: 1800000000 },
+    { symbol: 'SOL', price: 178.92, change24h: 5.21, high24h: 182, low24h: 168, volume24h: 3200000000 },
+    { symbol: 'XRP', price: 0.62, change24h: -1.23, high24h: 0.64, low24h: 0.60, volume24h: 2100000000 },
+    { symbol: 'DOGE', price: 0.185, change24h: 3.45, high24h: 0.19, low24h: 0.178, volume24h: 1500000000 },
+    { symbol: 'ADA', price: 0.48, change24h: -0.56, high24h: 0.49, low24h: 0.47, volume24h: 650000000 },
+    { symbol: 'AVAX', price: 38.75, change24h: 1.89, high24h: 39.50, low24h: 37.20, volume24h: 520000000 },
+  ],
+  fearGreed: { value: 45, sentiment: 'Fear', advice: 'Market shows fear — historically a potential accumulation zone. Consider DCA.' },
+  klines: Array.from({ length: 24 }, (_, i) => ({
+    time: Date.now() - (23 - i) * 3600000,
+    open: 66000 + Math.random() * 3000,
+    high: 67000 + Math.random() * 2000,
+    low: 65000 + Math.random() * 2000,
+    close: 66500 + Math.random() * 2500,
+    volume: 1000000000 + Math.random() * 500000000,
+  })),
+};
 
 // ---- Router ----
 const routes = {
@@ -763,6 +856,7 @@ const routes = {
   'POST /api/risk': handleRisk,
   'POST /api/dca': handleDCA,
   'POST /api/ai-chat': handleAIChat,
+  'GET /api/prices': handleLatestPrices,
   'GET /api/stream': handleSSE,
   'GET /metrics': handleMetrics,
 };
