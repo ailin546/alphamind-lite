@@ -119,6 +119,13 @@
     .price-flash-down { animation: flashDown 0.6s ease; }
     @keyframes flashUp { 0% { color: var(--up); background: rgba(0,230,118,0.15); } 100% { color: inherit; background: transparent; } }
     @keyframes flashDown { 0% { color: var(--down); background: rgba(255,82,82,0.15); } 100% { color: inherit; background: transparent; } }
+    /* Loading skeleton */
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .skeleton { background: linear-gradient(90deg, var(--bg-hover) 25%, var(--border) 50%, var(--bg-hover) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; color: transparent !important; }
+    /* Status dot */
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.live { background: var(--up); box-shadow: 0 0 6px var(--up); }
+    .status-dot.demo { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
     /* Focus visible */
     .nav-item:focus-visible, .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
     /* Cards */
@@ -586,6 +593,28 @@
           <div class="card">
             <div class="card-title">Fear & Greed History (30d)</div>
             <div class="chart-wrap"><canvas id="chart-fg"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Technical Signal Banner -->
+        <div class="card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px" id="dash-tech-banner">
+          <div>
+            <div class="card-title" style="margin-bottom:4px">Technical Analysis (BTC 4H)</div>
+            <span id="dash-ti-summary" style="font-size:0.95em;color:var(--text-dim)">Loading indicators...</span>
+          </div>
+          <div style="display:flex;gap:16px;align-items:center">
+            <div style="text-align:center">
+              <div style="font-size:0.75em;color:var(--text-dim)">RSI</div>
+              <div id="dash-ti-rsi" style="font-size:1.3em;font-weight:700">--</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:0.75em;color:var(--text-dim)">MACD</div>
+              <div id="dash-ti-macd" style="font-size:1.3em;font-weight:700">--</div>
+            </div>
+            <div style="text-align:center;padding:8px 16px;border-radius:8px;background:var(--bg)">
+              <div style="font-size:0.75em;color:var(--text-dim)">Signal</div>
+              <div id="dash-ti-signal" style="font-size:1.3em;font-weight:700;text-transform:uppercase">--</div>
+            </div>
           </div>
         </div>
 
@@ -1080,6 +1109,25 @@ Ask me anything about cryptocurrency markets, for example:
           document.getElementById('dash-signal').className = 'stat-value ' + s[1];
           document.getElementById('dash-signal-text').textContent = sentiment.analysis;
         }
+
+        // Load technical indicators (non-blocking)
+        api('/api/indicators?symbol=BTC&interval=4h').then(ti => {
+          if (ti && ti.rsi != null) {
+            document.getElementById('dash-ti-rsi').textContent = ti.rsi;
+            document.getElementById('dash-ti-rsi').style.color = ti.rsi < 30 ? 'var(--up)' : ti.rsi > 70 ? 'var(--down)' : 'var(--text)';
+          }
+          if (ti && ti.macd) {
+            document.getElementById('dash-ti-macd').textContent = ti.macd.histogram > 0 ? 'Bull' : 'Bear';
+            document.getElementById('dash-ti-macd').style.color = ti.macd.histogram > 0 ? 'var(--up)' : 'var(--down)';
+          }
+          if (ti && ti.signal) {
+            const sigEl = document.getElementById('dash-ti-signal');
+            sigEl.textContent = ti.signal;
+            sigEl.style.color = ti.signal === 'buy' ? 'var(--up)' : ti.signal === 'sell' ? 'var(--down)' : 'var(--warning)';
+            const labels = { buy: 'Bullish setup — consider entries', sell: 'Bearish setup — exercise caution', hold: 'Neutral — wait for clearer signal' };
+            document.getElementById('dash-ti-summary').textContent = labels[ti.signal] || 'Calculating...';
+          }
+        }).catch(() => {});
 
         // Market table
         let html = '';
