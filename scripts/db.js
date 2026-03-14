@@ -43,7 +43,9 @@ function load() {
   if (_cache) return _cache;
   ensureDir();
   try {
-    _cache = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    // Merge with defaults to handle schema upgrades (new fields)
+    _cache = { ...DEFAULT_DATA, ...raw, settings: { ...DEFAULT_DATA.settings, ...(raw.settings || {}) }, _meta: { ...DEFAULT_DATA._meta, ...(raw._meta || {}) } };
     return _cache;
   } catch (err) {
     if (err.code !== 'ENOENT') {

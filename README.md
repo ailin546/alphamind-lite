@@ -383,7 +383,7 @@ node server.js
 ## Tests
 
 ```bash
-npm test  # 46 tests, all passing
+npm test  # 62 tests, all passing
 ```
 
 ## License

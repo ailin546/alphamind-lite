@@ -561,7 +561,8 @@
           <div class="header-actions">
             <span class="live-indicator" id="data-status-indicator"></span>
             <span class="last-update" id="dash-update"></span>
-            <button class="btn" onclick="loadDashboard()">Refresh</button>
+            <button class="btn" onclick="loadDashboard()" title="Refresh (R)">Refresh</button>
+            <button class="btn" onclick="showToast('Shortcuts: 1-8 Navigate | R Refresh | E Export', 'success', 5000)" title="Keyboard Shortcuts" style="padding:8px 10px;font-size:0.8em">?</button>
           </div>
         </div>
 
@@ -678,6 +679,7 @@
         <div class="header">
           <h2>Portfolio Manager</h2>
           <div class="header-actions">
+            <button class="btn" onclick="exportPortfolioCSV()" title="Export CSV (E)">Export</button>
             <button class="btn-primary btn" onclick="analyzePortfolio()">Analyze</button>
           </div>
         </div>
@@ -1019,6 +1021,25 @@ Ask me anything about cryptocurrency markets, for example:
           </div>
         </div>
 
+        <!-- BNB Ecosystem L2 Cards -->
+        <div class="grid-3" style="margin-top:16px">
+          <div class="stat-card" style="border-left:3px solid var(--secondary)">
+            <div class="stat-label">opBNB (L2)</div>
+            <div class="stat-value" style="font-size:1.1em;color:var(--secondary)">~4,000 TPS</div>
+            <div class="stat-change" style="color:var(--text-dim)">Optimistic Rollup | Chain ID: 204</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--primary)">
+            <div class="stat-label">BNB Greenfield</div>
+            <div class="stat-value" style="font-size:1.1em;color:var(--primary)">Storage</div>
+            <div class="stat-change" style="color:var(--text-dim)">Decentralized data marketplace</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--warning)">
+            <div class="stat-label">DeFi TVL</div>
+            <div class="stat-value" id="bsc-tvl" style="font-size:1.1em;color:var(--warning)">$5.2B</div>
+            <div class="stat-change" style="color:var(--text-dim)">Estimated total value locked</div>
+          </div>
+        </div>
+
         <div class="grid-2" style="margin-top:16px">
           <div class="card">
             <div class="card-title">BNB Smart Chain (BSC) Stats</div>
@@ -1030,22 +1051,28 @@ Ask me anything about cryptocurrency markets, for example:
                 <span style="color:var(--text-dim)">TPS</span><span>~100 tx/s</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-                <span style="color:var(--text-dim)">Validators</span><span>21 Active (PoSA)</span>
+                <span style="color:var(--text-dim)">Validators</span><span>21 Active + 20 Candidates</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-                <span style="color:var(--text-dim)">Consensus</span><span>Proof of Staked Authority</span>
+                <span style="color:var(--text-dim)">Consensus</span><span>PoSA (Proof of Staked Authority)</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
                 <span style="color:var(--text-dim)">EVM Compatible</span><span style="color:var(--up)">Yes (Solidity)</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-                <span style="color:var(--text-dim)">Token Standard</span><span>BEP-20 / BEP-721 / BEP-1155</span>
+                <span style="color:var(--text-dim)">Token Standards</span><span>BEP-20 / BEP-721 / BEP-1155</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Total Transactions</span><span id="bsc-total-tx">4.5B+</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Unique Addresses</span><span id="bsc-unique-addr">380M+</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
                 <span style="color:var(--text-dim)">BNB Auto-Burn</span><span style="color:var(--warning)">Quarterly (deflationary)</span>
               </div>
               <div style="display:flex;justify-content:space-between;padding:8px 0">
-                <span style="color:var(--text-dim)">Chain ID</span><span>56 (Mainnet)</span>
+                <span style="color:var(--text-dim)">Chain ID</span><span>56 (Mainnet) | opBNB: 204</span>
               </div>
             </div>
           </div>
@@ -1816,6 +1843,11 @@ Ask me anything about cryptocurrency markets, for example:
         if (bsc.defi) {
           document.getElementById('bsc-defi-count').textContent = fmt(bsc.defi.totalProtocols, 0) + '+';
           document.getElementById('bsc-top-defi').textContent = bsc.defi.topProtocols.join(', ');
+          if (bsc.defi.tvlEstimate) document.getElementById('bsc-tvl').textContent = bsc.defi.tvlEstimate;
+        }
+        if (bsc.stats) {
+          if (bsc.stats.totalTransactions) document.getElementById('bsc-total-tx').textContent = bsc.stats.totalTransactions;
+          if (bsc.stats.uniqueAddresses) document.getElementById('bsc-unique-addr').textContent = bsc.stats.uniqueAddresses;
         }
 
         // Ecosystem tokens
@@ -2021,6 +2053,54 @@ Ask me anything about cryptocurrency markets, for example:
       const keys = Object.keys(t);
       navItems.forEach((el, i) => { if (keys[i] && t[keys[i]]) el.textContent = t[keys[i]]; });
       localStorage.setItem('am_lang', lang);
+    }
+
+    // ─── Keyboard Shortcuts ─────────────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      // Ignore when typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey) return;
+
+      const shortcuts = {
+        '1': 'dashboard', '2': 'market', '3': 'portfolio', '4': 'sentiment',
+        '5': 'risk', '6': 'tools', '7': 'ai', '8': 'bsc',
+        'r': () => { // Refresh current page
+          const active = document.querySelector('.page.active');
+          if (active) {
+            const id = active.id.replace('page-', '');
+            if (id === 'dashboard') loadDashboard();
+            else if (id === 'market') { loadMarketTable(); loadMarketChart(); }
+            else if (id === 'bsc') loadBSCData();
+            showToast('Refreshed', 'success', 1500);
+          }
+        },
+        'e': () => exportPortfolioCSV(), // Export
+      };
+
+      const action = shortcuts[e.key];
+      if (typeof action === 'string') { e.preventDefault(); showPage(action); }
+      else if (typeof action === 'function') { e.preventDefault(); action(); }
+    });
+
+    // ─── Portfolio Export ─────────────────────────────────────────────────────
+    function exportPortfolioCSV() {
+      const rows = [['Symbol', 'Amount', 'Avg Price', 'Current Value', 'PnL %']];
+      const holdings = portfolio || [];
+      if (holdings.length === 0) { showToast('No portfolio data to export', 'error'); return; }
+
+      holdings.forEach(h => {
+        rows.push([h.symbol, h.amount, h.avgPrice, '', '']);
+      });
+
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `alphamind-portfolio-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Portfolio exported as CSV', 'success');
     }
 
     // ─── Init ────────────────────────────────────────────────────────────────

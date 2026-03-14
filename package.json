@@ -1,6 +1,6 @@
 {
   "name": "alphamind-lite",
-  "version": "10.8.0",
+  "version": "10.14.0",
   "description": "AI-powered cryptocurrency investment assistant with real-time market analysis, portfolio management, and intelligent trading advice",
   "main": "scripts/server.js",
   "scripts": {

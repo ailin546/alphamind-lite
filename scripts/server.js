@@ -122,6 +122,10 @@ const SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY',
   'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'",
   'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'X-DNS-Prefetch-Control': 'off',
+  'X-Permitted-Cross-Domain-Policies': 'none',
 };
 
 function sendJSON(res, statusCode, data) {
@@ -996,17 +1000,41 @@ async function handleBSCData(req, res) {
       ecosystem: bscTokens,
       defi: {
         totalProtocols: 1500,
+        tvlEstimate: '$5.2B',
         topProtocols: ['PancakeSwap', 'Venus', 'Alpaca Finance', 'BiSwap', 'Beefy'],
         tokenStandards: ['BEP-20', 'BEP-721 (NFT)', 'BEP-1155'],
+      },
+      layer2: {
+        opBNB: {
+          name: 'opBNB',
+          type: 'Optimistic Rollup (L2)',
+          avgGas: '<0.001 Gwei',
+          tps: '~4000',
+          chainId: 204,
+          status: 'Mainnet',
+          description: 'EVM-compatible L2 scaling solution for BSC',
+        },
+        greenfield: {
+          name: 'BNB Greenfield',
+          type: 'Decentralized Storage',
+          status: 'Mainnet',
+          description: 'Decentralized data storage with native BNB economy',
+          features: ['Object storage', 'Data marketplace', 'Programmable access control'],
+        },
       },
       stats: {
         avgBlockTime: '3s',
         tps: '~100',
         validators: 21,
-        consensus: 'PoSA',
+        activeValidators: 21,
+        candidateValidators: 20,
+        consensus: 'PoSA (Proof of Staked Authority)',
         chainId: 56,
         totalSupply: bnbInfo.totalSupply,
         marketCap: bnbInfo.marketCap,
+        totalTransactions: '4.5B+',
+        uniqueAddresses: '380M+',
+        dailyTransactions: '~4M',
       },
     };
     setCache(cacheKey, response, 15000);
@@ -1225,8 +1253,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // CORS headers — restrict to same-origin; configurable via env
-  const allowedOrigin = process.env.CORS_ORIGIN || req.headers.origin || '*';
+  // CORS headers — restrict origins; configurable via env
+  const corsOrigin = process.env.CORS_ORIGIN;
+  const allowedOrigin = corsOrigin || (req.headers.origin && req.headers.host && req.headers.origin.includes(req.headers.host) ? req.headers.origin : 'null');
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

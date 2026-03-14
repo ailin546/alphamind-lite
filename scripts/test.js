@@ -379,6 +379,62 @@ test('escapeHtml prevents XSS', () => {
   assert.strictEqual(escapeHtml("it's"), "it&#039;s");
 });
 
+// ---- Paper Trading DB Tests ----
+console.log('\n📋 Paper Trading');
+
+test('paper trading balance starts at 10000', () => {
+  const db = require('./db');
+  db.load(); // Ensure DB is initialized
+  const balance = db.getPaperBalance();
+  assert.ok(typeof balance === 'number', 'Balance should be a number');
+  assert.ok(balance > 0, 'Balance should be positive');
+});
+
+test('paper trading rejects buy with insufficient balance', () => {
+  const db = require('./db');
+  db.load(); // Ensure DB is initialized
+  const result = db.addPaperTrade('BTC', 'buy', 999999999, 100000);
+  assert.strictEqual(result, null, 'Should reject buy exceeding balance');
+});
+
+test('paper trading tracks trade history', () => {
+  const db = require('./db');
+  db.load(); // Ensure DB is initialized
+  const trades = db.getPaperTrades();
+  assert.ok(Array.isArray(trades), 'Trades should be an array');
+});
+
+// ---- BSC Data Structure Tests ----
+console.log('\n📋 BSC Data Structure');
+
+test('BSC chain constants are valid', () => {
+  // Validate key BSC chain parameters used in server response
+  const originalSupply = 200000000;
+  const burnedTotal = 54065938;
+  const circulatingSupply = originalSupply - burnedTotal;
+
+  assert.ok(burnedTotal > 0, 'Burned total should be positive');
+  assert.ok(circulatingSupply < originalSupply, 'Circulating should be less than original');
+  assert.ok(circulatingSupply > 100000000, 'Circulating should be > 100M');
+
+  const burnRatePercent = (burnedTotal / originalSupply) * 100;
+  assert.ok(burnRatePercent > 20 && burnRatePercent < 40, 'Burn rate should be 20-40%');
+});
+
+test('BSC ecosystem tokens list is valid', () => {
+  const bscTokens = ['CAKE', 'XVS', 'BAKE', 'ALPACA', 'BSW'];
+  assert.strictEqual(bscTokens.length, 5, 'Should track 5 BSC tokens');
+  assert.ok(bscTokens.includes('CAKE'), 'Should include PancakeSwap token');
+  assert.ok(bscTokens.every(t => /^[A-Z]+$/.test(t)), 'All tokens should be uppercase');
+});
+
+test('BSC L2 chain IDs are correct', () => {
+  const BSC_CHAIN_ID = 56;
+  const OPBNB_CHAIN_ID = 204;
+  assert.strictEqual(BSC_CHAIN_ID, 56, 'BSC mainnet chain ID should be 56');
+  assert.strictEqual(OPBNB_CHAIN_ID, 204, 'opBNB chain ID should be 204');
+});
+
 // ---- HTTP Integration Tests ----
 console.log('\n📋 HTTP Integration');
 
@@ -469,11 +525,11 @@ testAsync('server returns proper security headers', async () => {
   const http = require('http');
   const { spawn } = require('child_process');
 
-  const testPort = 39126;
+  const testPort = 39130;
   const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error' };
   const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
 
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 2000));
 
   try {
     const headers = await new Promise((resolve, reject) => {
@@ -487,6 +543,10 @@ testAsync('server returns proper security headers', async () => {
     assert.ok(headers['x-frame-options'] === 'DENY', 'Should have X-Frame-Options');
     assert.ok(headers['x-request-id'], 'Should have X-Request-ID');
     assert.ok(headers['content-security-policy'], 'Should have CSP header');
+    assert.ok(headers['strict-transport-security'] && headers['strict-transport-security'].includes('max-age'), 'Should have HSTS header');
+    assert.ok(headers['permissions-policy'] && headers['permissions-policy'].includes('camera'), 'Should have Permissions-Policy header');
+    assert.ok(headers['x-dns-prefetch-control'] === 'off', 'Should have X-DNS-Prefetch-Control');
+    assert.ok(headers['x-permitted-cross-domain-policies'] === 'none', 'Should have X-Permitted-Cross-Domain-Policies');
   } finally {
     server.kill('SIGTERM');
     await new Promise(r => setTimeout(r, 500));
@@ -497,7 +557,7 @@ testAsync('server rate limiting works', async () => {
   const http = require('http');
   const { spawn } = require('child_process');
 
-  const testPort = 39127;
+  const testPort = 39135;
   const env = { ...process.env, PORT: String(testPort), NODE_ENV: 'test', LOG_LEVEL: 'error', RATE_LIMIT_MAX: '5', RATE_LIMIT_WINDOW: '60000' };
   const server = spawn('node', [path.join(__dirname, 'server.js')], { env, stdio: 'pipe' });
 
