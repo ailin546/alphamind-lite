@@ -338,7 +338,7 @@ async function loadMarketChart() {
       var infoHtml = '<div style="display:flex;gap:16px;margin-top:8px;font-size:0.85em;color:var(--text-dim)">';
       infoHtml += '<span>RSI: <strong style="color:' + (indicators.rsi < 30 ? 'var(--up)' : indicators.rsi > 70 ? 'var(--down)' : 'var(--text)') + '">' + indicators.rsi + '</strong></span>';
       if (indicators.macd) infoHtml += '<span>MACD: <strong style="color:' + (indicators.macd.histogram > 0 ? 'var(--up)' : 'var(--down)') + '">' + (indicators.macd.histogram > 0 ? 'Bullish' : 'Bearish') + '</strong></span>';
-      infoHtml += '<span>Signal: <strong style="color:' + (indicators.signal === 'buy' ? 'var(--up)' : indicators.signal === 'sell' ? 'var(--down)' : 'var(--warning)') + '">' + indicators.signal.toUpperCase() + '</strong></span>';
+      if (indicators.signal) infoHtml += '<span>Signal: <strong style="color:' + (indicators.signal === 'buy' ? 'var(--up)' : indicators.signal === 'sell' ? 'var(--down)' : 'var(--warning)') + '">' + indicators.signal.toUpperCase() + '</strong></span>';
       if (indicators.bollinger) infoHtml += '<span>BB: ' + fmtUSD(indicators.bollinger.lower) + ' — ' + fmtUSD(indicators.bollinger.upper) + '</span>';
       infoHtml += '</div>';
       var chartCard = document.getElementById('chart-market').closest('.card');
@@ -415,6 +415,7 @@ function renderHoldings() {
 
 async function analyzePortfolio() {
   if (portfolio.length === 0) { showToast('Add holdings first', 'error'); return; }
+  try {
   var result = await api('/api/portfolio', { body: { holdings: portfolio } });
 
   document.getElementById('pf-summary').style.display = 'grid';
@@ -466,6 +467,7 @@ async function analyzePortfolio() {
       plugins: { legend: { display: true, position: 'right', labels: { color: '#e8eaed' } } },
     },
   });
+  } catch (err) { showToast('Portfolio analysis failed: ' + err.message, 'error'); }
 }
 
 // ─── Sentiment ───────────────────────────────────────────────────────────
@@ -556,7 +558,9 @@ async function calculateRisk() {
   var entryPrice = parseFloat(document.getElementById('risk-entry').value);
   var leverage = parseInt(document.getElementById('risk-leverage').value);
 
-  var r = await api('/api/risk', { body: { symbol: symbol, quantity: quantity, entryPrice: entryPrice, leverage: leverage } });
+  var r;
+  try { r = await api('/api/risk', { body: { symbol: symbol, quantity: quantity, entryPrice: entryPrice, leverage: leverage } }); }
+  catch (err) { document.getElementById('risk-result').innerHTML = '<div class="loading" style="color:var(--down)">' + escapeHtml(err.message) + '</div>'; return; }
   if (r.error) { document.getElementById('risk-result').innerHTML = '<div class="loading">' + escapeHtml(r.error) + '</div>'; return; }
 
   var riskColors = { safe: 'risk-safe', warning: 'risk-warning', danger: 'risk-danger', liquidated: 'risk-danger' };
@@ -624,7 +628,9 @@ async function calcDCA() {
   var monthlyAmount = parseFloat(document.getElementById('dca-amount').value);
   var months = parseInt(document.getElementById('dca-months').value);
 
-  var r = await api('/api/dca', { body: { symbol: symbol, monthlyAmount: monthlyAmount, months: months } });
+  var r;
+  try { r = await api('/api/dca', { body: { symbol: symbol, monthlyAmount: monthlyAmount, months: months } }); }
+  catch (err) { document.getElementById('dca-result').innerHTML = '<p style="color:var(--down)">' + escapeHtml(err.message) + '</p>'; return; }
   if (r.error) { document.getElementById('dca-result').innerHTML = '<p>' + escapeHtml(r.error) + '</p>'; return; }
 
   var profitCls = r.profit >= 0 ? 'up' : 'down';
@@ -999,9 +1005,11 @@ async function loadWhaleData() {
 
     // On-chain transactions
     var onchainBody = document.getElementById('whale-onchain-body');
-    var blockInfo = document.getElementById('whale-block-info');
-    if (blockInfo && data.onchain) {
-      blockInfo.textContent = t('whale.block') + ' #' + fmt(data.onchain.blockHeight, 0) + ' (' + data.onchain.blockHash + ')';
+    var blockHeight = document.getElementById('whale-block-height');
+    var blockHash = document.getElementById('whale-block-hash');
+    if (data.onchain) {
+      if (blockHeight) blockHeight.textContent = '#' + fmt(data.onchain.blockHeight, 0);
+      if (blockHash) blockHash.textContent = data.onchain.blockHash;
     }
     if (onchainBody && data.onchain) {
       if (data.onchain.transactions.length === 0) {
@@ -1212,6 +1220,30 @@ var i18n = {
     'funding.monthly': 'Monthly Yield',
     'funding.bullish': 'Bullish', 'funding.bearish': 'Bearish', 'funding.neutral': 'Neutral',
     'funding.noOpps': 'No funding opportunities', 'funding.loaded': 'Funding data updated', 'funding.error': 'Failed to load funding data',
+    // Whale HTML labels
+    'whale.volume24h': '24h Volume', 'whale.largeTrades': 'Binance Large Trades (>$500K)',
+    'whale.loading': 'Loading whale data...', 'whale.loadingOnchain': 'Loading on-chain data...',
+    'whale.blockHeight': 'Block Height', 'whale.blockHash': 'Block Hash',
+    'whale.th.time': 'Time', 'whale.th.side': 'Side', 'whale.th.price': 'Price',
+    'whale.th.quantity': 'Quantity', 'whale.th.usdValue': 'USD Value',
+    'whale.th.hash': 'TX Hash', 'whale.th.btcAmount': 'BTC Amount', 'whale.th.size': 'Size',
+    // Arb HTML labels
+    'arb.tab.scanner': 'Arbitrage Scanner', 'arb.tab.funding': 'Funding Rates',
+    'arb.basisArbitrage': 'Basis Arbitrage Opportunities', 'arb.highVolatility': 'High Volatility Coins',
+    'arb.volatilityOpps': 'High Volatility', 'arb.allCoins': 'All Coins Spread Analysis',
+    'arb.loading': 'Loading arbitrage data...', 'arb.loadingBasis': 'Loading basis opportunities...',
+    'arb.loadingVolatility': 'Loading volatility data...',
+    'arb.th.symbol': 'Symbol', 'arb.th.spotPrice': 'Spot Price', 'arb.th.futuresPrice': 'Futures Price',
+    'arb.th.basis': 'Basis (%)', 'arb.th.fundingRate': 'Funding Rate', 'arb.th.fundingApy': 'Funding APY',
+    'arb.th.dayRange': 'Day Range', 'arb.th.volume': 'Volume',
+    // Funding HTML labels
+    'funding.sentiment': 'Sentiment', 'funding.opportunities': 'Funding Opportunities',
+    'funding.rates': 'All Funding Rates', 'funding.loadingOpps': 'Loading opportunities...',
+    'funding.loadingRates': 'Loading funding rates...',
+    'funding.th.symbol': 'Symbol', 'funding.th.fundingRate': 'Funding Rate',
+    'funding.th.markPrice': 'Mark Price', 'funding.th.indexPrice': 'Index Price',
+    'funding.th.grossApy': 'Gross APY', 'funding.th.netApy': 'Net APY',
+    'funding.th.riskLevel': 'Risk Level', 'funding.th.nextFunding': 'Next Funding',
     // Common
     'btn.refresh': 'Refresh',
   },
@@ -1253,6 +1285,30 @@ var i18n = {
     'funding.monthly': '月收益',
     'funding.bullish': '看涨', 'funding.bearish': '看跌', 'funding.neutral': '中性',
     'funding.noOpps': '无资金费率机会', 'funding.loaded': '资金费率数据已更新', 'funding.error': '加载资金费率失败',
+    // Whale HTML labels
+    'whale.volume24h': '24h 成交量', 'whale.largeTrades': '币安大额交易 (>$50万)',
+    'whale.loading': '加载巨鲸数据...', 'whale.loadingOnchain': '加载链上数据...',
+    'whale.blockHeight': '区块高度', 'whale.blockHash': '区块哈希',
+    'whale.th.time': '时间', 'whale.th.side': '方向', 'whale.th.price': '价格',
+    'whale.th.quantity': '数量', 'whale.th.usdValue': 'USD价值',
+    'whale.th.hash': '交易哈希', 'whale.th.btcAmount': 'BTC数量', 'whale.th.size': '规模',
+    // Arb HTML labels
+    'arb.tab.scanner': '套利扫描', 'arb.tab.funding': '资金费率',
+    'arb.basisArbitrage': '基差套利机会', 'arb.highVolatility': '高波动币种',
+    'arb.volatilityOpps': '高波动', 'arb.allCoins': '全币种价差分析',
+    'arb.loading': '加载套利数据...', 'arb.loadingBasis': '加载基差机会...',
+    'arb.loadingVolatility': '加载波动率数据...',
+    'arb.th.symbol': '币种', 'arb.th.spotPrice': '现货价', 'arb.th.futuresPrice': '合约价',
+    'arb.th.basis': '基差(%)', 'arb.th.fundingRate': '资金费率', 'arb.th.fundingApy': '资金年化',
+    'arb.th.dayRange': '日内波幅', 'arb.th.volume': '成交量',
+    // Funding HTML labels
+    'funding.sentiment': '情绪', 'funding.opportunities': '资金费率机会',
+    'funding.rates': '全部资金费率', 'funding.loadingOpps': '加载机会...',
+    'funding.loadingRates': '加载资金费率...',
+    'funding.th.symbol': '币种', 'funding.th.fundingRate': '资金费率',
+    'funding.th.markPrice': '标记价格', 'funding.th.indexPrice': '指数价格',
+    'funding.th.grossApy': '毛年化', 'funding.th.netApy': '净年化',
+    'funding.th.riskLevel': '风险等级', 'funding.th.nextFunding': '下次结算',
     // Common
     'btn.refresh': '刷新',
   },
