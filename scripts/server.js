@@ -17,6 +17,7 @@ const { handlePortfolio, handlePortfolioAdd, handlePortfolioRemove, handleAlerts
 const { handleRisk, handleDCA, handlePaperTrade, handlePaperTradeHistory, handlePaperTradeReset, handleLatestPrices, setLastPrices } = require('./routes-trading');
 const { handleAIChat } = require('./routes-ai-chat');
 const { handleBSCData } = require('./routes-bsc');
+const { handleWhaleAlert, handleArbitrage, handleFundingRate } = require('./routes-whale-arb');
 const { handleSSE, heartbeatTimer, broadcastTimer, drainClients, onPricesUpdate } = require('./sse');
 
 createLogger({ context: 'server' });
@@ -49,6 +50,9 @@ const routes = {
   'GET /api/paper-trade': handlePaperTradeHistory,
   'POST /api/paper-trade/reset': handlePaperTradeReset,
   'GET /api/bsc': handleBSCData,
+  'GET /api/whale': handleWhaleAlert,
+  'GET /api/arbitrage': handleArbitrage,
+  'GET /api/funding-rate': handleFundingRate,
   'GET /api/indicators': handleIndicators,
   'GET /api/multi-timeframe': handleMultiTimeframe,
   'GET /api/prices': handleLatestPrices,

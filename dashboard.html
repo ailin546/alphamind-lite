@@ -507,6 +507,34 @@
     .lang-toggle { display: inline-flex; gap: 2px; background: var(--bg); border-radius: 6px; padding: 2px; margin-left: 8px; }
     .lang-toggle button { border: none; background: none; color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7em; }
     .lang-toggle button.active { background: var(--primary); color: #000; }
+
+    /* Whale & Arbitrage Styles */
+    .pressure-bar { display:flex; height:32px; border-radius:8px; overflow:hidden; margin:8px 0 }
+    .pressure-bar .buy-bar { background:var(--up); display:flex; align-items:center; justify-content:center; font-weight:600; color:#000; font-size:0.85em; transition:width 0.5s }
+    .pressure-bar .sell-bar { background:var(--down); display:flex; align-items:center; justify-content:center; font-weight:600; color:#fff; font-size:0.85em; transition:width 0.5s }
+    .whale-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.75em; font-weight:600; text-transform:uppercase }
+    .whale-badge.whale { background:rgba(255,64,129,0.2); color:var(--accent) }
+    .whale-badge.shark { background:rgba(255,171,0,0.2); color:var(--warning) }
+    .whale-badge.dolphin { background:rgba(0,176,255,0.2); color:var(--secondary) }
+    .side-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.8em; font-weight:600 }
+    .side-badge.buy { background:rgba(0,230,118,0.15); color:var(--up) }
+    .side-badge.sell { background:rgba(255,82,82,0.15); color:var(--down) }
+    .risk-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.75em; font-weight:600 }
+    .risk-badge.normal { background:rgba(0,230,118,0.15); color:var(--up) }
+    .risk-badge.high { background:rgba(255,171,0,0.2); color:var(--warning) }
+    .risk-badge.extreme { background:rgba(255,82,82,0.15); color:var(--down) }
+    .arb-tabs { display:flex; gap:8px; margin-bottom:16px }
+    .arb-tab { padding:8px 20px; border-radius:8px; cursor:pointer; background:var(--bg); color:var(--text-dim); border:1px solid var(--border); font-size:0.9em; transition:all 0.2s }
+    .arb-tab.active { background:var(--primary); color:#000; border-color:var(--primary); font-weight:600 }
+    .arb-tab:hover:not(.active) { background:var(--bg-hover); color:var(--text) }
+    .opp-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:8px }
+    .opp-card .opp-symbol { font-weight:700; font-size:1.1em; color:var(--primary) }
+    .opp-card .opp-detail { color:var(--text-dim); font-size:0.85em; margin-top:4px }
+    .legend-item { display:inline-flex; align-items:center; gap:6px; margin-right:16px; font-size:0.85em; color:var(--text-dim) }
+    .sentiment-badge { display:inline-block; padding:4px 12px; border-radius:16px; font-weight:700; font-size:1.1em; text-transform:uppercase }
+    .sentiment-badge.bullish { background:rgba(0,230,118,0.15); color:var(--up) }
+    .sentiment-badge.bearish { background:rgba(255,82,82,0.15); color:var(--down) }
+    .sentiment-badge.neutral { background:rgba(138,143,152,0.15); color:var(--text-dim) }
   </style>
 </head>
 <body>
@@ -527,28 +555,34 @@
         </div>
       </div>
       <div class="nav-item active" data-page="dashboard" role="button" tabindex="0">
-        <span class="nav-icon">&#128202;</span> <span class="nav-text">Dashboard</span>
+        <span class="nav-icon">&#128202;</span> <span class="nav-text" data-i18n="nav.dashboard">Dashboard</span>
       </div>
       <div class="nav-item" data-page="market" role="button" tabindex="0">
-        <span class="nav-icon">&#128200;</span> <span class="nav-text">Market Data</span>
+        <span class="nav-icon">&#128200;</span> <span class="nav-text" data-i18n="nav.market">Market Data</span>
       </div>
       <div class="nav-item" data-page="portfolio" role="button" tabindex="0">
-        <span class="nav-icon">&#128188;</span> <span class="nav-text">Portfolio</span>
+        <span class="nav-icon">&#128188;</span> <span class="nav-text" data-i18n="nav.portfolio">Portfolio</span>
       </div>
       <div class="nav-item" data-page="sentiment" role="button" tabindex="0">
-        <span class="nav-icon">&#127919;</span> <span class="nav-text">Sentiment</span>
+        <span class="nav-icon">&#127919;</span> <span class="nav-text" data-i18n="nav.sentiment">Sentiment</span>
       </div>
       <div class="nav-item" data-page="risk" role="button" tabindex="0">
-        <span class="nav-icon">&#128737;</span> <span class="nav-text">Risk Control</span>
+        <span class="nav-icon">&#128737;</span> <span class="nav-text" data-i18n="nav.risk">Risk Control</span>
       </div>
       <div class="nav-item" data-page="tools" role="button" tabindex="0">
-        <span class="nav-icon">&#128295;</span> <span class="nav-text">Tools</span>
+        <span class="nav-icon">&#128295;</span> <span class="nav-text" data-i18n="nav.tools">Tools</span>
+      </div>
+      <div class="nav-item" data-page="whale" role="button" tabindex="0">
+        <span class="nav-icon">&#128011;</span> <span class="nav-text" data-i18n="nav.whale">Whale Tracking</span>
+      </div>
+      <div class="nav-item" data-page="arb" role="button" tabindex="0">
+        <span class="nav-icon">&#9878;</span> <span class="nav-text" data-i18n="nav.arb">Arbitrage</span>
       </div>
       <div class="nav-item" data-page="bsc" role="button" tabindex="0">
-        <span class="nav-icon">&#9939;</span> <span class="nav-text">BSC Chain</span>
+        <span class="nav-icon">&#9939;</span> <span class="nav-text" data-i18n="nav.bsc">BSC Chain</span>
       </div>
       <div class="nav-item" data-page="ai" role="button" tabindex="0">
-        <span class="nav-icon">&#129302;</span> <span class="nav-text">AI Chat</span>
+        <span class="nav-icon">&#129302;</span> <span class="nav-text" data-i18n="nav.ai">AI Chat</span>
       </div>
     </nav>
 
@@ -973,6 +1007,243 @@ Ask me anything about cryptocurrency markets, for example:
           <div class="chat-input-bar">
             <input type="text" id="chat-input" class="chat-input" placeholder="Ask about crypto markets..." aria-label="Chat message input">
             <button class="btn btn-primary" data-action="sendChat">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- === WHALE TRACKING PAGE === -->
+      <div id="page-whale" class="page">
+        <div class="header">
+          <h2 data-i18n="h.whale">Whale Tracking</h2>
+          <div class="header-actions">
+            <button class="btn" data-action="loadWhaleData" data-i18n="btn.refresh">Refresh</button>
+          </div>
+        </div>
+        <div id="whale-content">
+          <!-- Summary Stats -->
+          <div class="grid-4">
+            <div class="stat-card">
+              <div class="stat-label" data-i18n="whale.btcPrice">BTC Price</div>
+              <div class="stat-value" id="whale-btc-price">--</div>
+              <div class="stat-change" id="whale-btc-change">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label" data-i18n="whale.volume24h">24h Volume</div>
+              <div class="stat-value" id="whale-volume">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label" data-i18n="whale.tradeCount">Large Trade Count</div>
+              <div class="stat-value" id="whale-trade-count">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label" data-i18n="whale.sentiment">Market Sentiment</div>
+              <div class="stat-value" id="whale-sentiment">--</div>
+            </div>
+          </div>
+
+          <!-- Buy/Sell Pressure Bar -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title" data-i18n="whale.pressure">Buy / Sell Pressure</div>
+            <div id="whale-pressure" style="margin-top:8px">
+              <div class="pressure-bar">
+                <span class="buy-bar" style="width:50%">50%</span>
+                <span class="sell-bar" style="width:50%">50%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Large Trades Table -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title" data-i18n="whale.largeTrades">Large Trades (Binance)</div>
+            <div style="overflow-x:auto">
+              <table class="market-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="whale.th.time">Time</th>
+                    <th data-i18n="whale.th.side">Side</th>
+                    <th data-i18n="whale.th.price">Price</th>
+                    <th data-i18n="whale.th.quantity">Quantity</th>
+                    <th data-i18n="whale.th.usdValue">USD Value</th>
+                  </tr>
+                </thead>
+                <tbody id="whale-trades-body">
+                  <tr><td colspan="5" class="loading"><div class="spinner"></div> <span data-i18n="whale.loading">Loading whale data...</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- On-Chain BTC Transactions -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title" data-i18n="whale.onchain">On-Chain BTC Transactions</div>
+            <div style="margin-bottom:8px; font-size:0.85em; color:var(--text-dim)">
+              <span data-i18n="whale.blockHeight">Block Height:</span> <strong id="whale-block-height">--</strong>
+              &nbsp;|&nbsp;
+              <span data-i18n="whale.blockHash">Hash:</span> <code id="whale-block-hash" style="font-size:0.85em">--</code>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="market-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="whale.th.hash">Hash</th>
+                    <th data-i18n="whale.th.btcAmount">BTC Amount</th>
+                    <th data-i18n="whale.th.usdValue">USD Value</th>
+                    <th data-i18n="whale.th.size">Size</th>
+                    <th data-i18n="whale.th.time">Time</th>
+                  </tr>
+                </thead>
+                <tbody id="whale-onchain-body">
+                  <tr><td colspan="5" class="loading"><div class="spinner"></div> <span data-i18n="whale.loadingOnchain">Loading on-chain data...</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Legend -->
+          <div class="card" style="margin-top:16px; padding:12px 16px">
+            <div class="card-title" data-i18n="whale.legend" style="margin-bottom:8px">Size Legend</div>
+            <div>
+              <span class="legend-item"><span class="whale-badge whale">Whale</span> <span data-i18n="whale.legendWhale">&ge; 1,000 BTC</span></span>
+              <span class="legend-item"><span class="whale-badge shark">Shark</span> <span data-i18n="whale.legendShark">&ge; 500 BTC</span></span>
+              <span class="legend-item"><span class="whale-badge dolphin">Dolphin</span> <span data-i18n="whale.legendDolphin">&ge; 100 BTC</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ARBITRAGE PAGE === -->
+      <div id="page-arb" class="page">
+        <div class="header">
+          <h2 data-i18n="h.arb">Arbitrage Scanner</h2>
+          <div class="header-actions">
+            <button class="btn" data-action="loadArbitrageData" data-i18n="btn.refresh">Refresh</button>
+          </div>
+        </div>
+        <div id="arb-content">
+          <!-- Tab Bar -->
+          <div class="arb-tabs">
+            <button class="arb-tab active" data-action="showArbTab" data-i18n="arb.tab.scanner">Arbitrage Scanner</button>
+            <button class="arb-tab" data-action="showFundingTab" data-i18n="arb.tab.funding">Funding Rates</button>
+          </div>
+
+          <!-- Arbitrage Scanner Tab -->
+          <div id="arb-scanner-tab">
+            <!-- Summary Stats -->
+            <div class="grid-3">
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="arb.totalCoins">Total Coins</div>
+                <div class="stat-value" id="arb-total-coins">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="arb.basisOpps">Basis Opportunities</div>
+                <div class="stat-value" id="arb-basis-count">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="arb.volatilityOpps">High Volatility</div>
+                <div class="stat-value" id="arb-volatility-count">--</div>
+              </div>
+            </div>
+
+            <!-- Basis Arbitrage Opportunities -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="arb.basisArbitrage">Basis Arbitrage Opportunities</div>
+              <div id="arb-basis-opps">
+                <div class="loading"><div class="spinner"></div> <span data-i18n="arb.loadingBasis">Loading basis opportunities...</span></div>
+              </div>
+            </div>
+
+            <!-- High Volatility Opportunities -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="arb.highVolatility">High Volatility Opportunities</div>
+              <div id="arb-volatility-opps">
+                <div class="loading"><div class="spinner"></div> <span data-i18n="arb.loadingVolatility">Loading volatility data...</span></div>
+              </div>
+            </div>
+
+            <!-- All Coins Table -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="arb.allCoins">All Coins Spread Analysis</div>
+              <div style="overflow-x:auto">
+                <table class="market-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="arb.th.symbol">Symbol</th>
+                      <th data-i18n="arb.th.spotPrice">Spot Price</th>
+                      <th data-i18n="arb.th.futuresPrice">Futures Price</th>
+                      <th data-i18n="arb.th.basis">Basis (%)</th>
+                      <th data-i18n="arb.th.fundingRate">Funding Rate</th>
+                      <th data-i18n="arb.th.fundingApy">APY</th>
+                      <th data-i18n="arb.th.dayRange">24h Range</th>
+                      <th data-i18n="arb.th.volume">Volume</th>
+                    </tr>
+                  </thead>
+                  <tbody id="arb-coins-body">
+                    <tr><td colspan="8" class="loading"><div class="spinner"></div> <span data-i18n="arb.loading">Loading arbitrage data...</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Timestamp -->
+            <div style="margin-top:12px; text-align:center; font-size:0.85em; color:var(--text-dim)" id="arb-timestamp"></div>
+          </div>
+
+          <!-- Funding Rates Tab (hidden by default) -->
+          <div id="arb-funding-tab" style="display:none">
+            <!-- Market Sentiment Summary -->
+            <div class="grid-4">
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="funding.sentiment">Sentiment</div>
+                <div class="stat-value" id="funding-sentiment">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="funding.avgRate">Avg Rate</div>
+                <div class="stat-value" id="funding-avg-rate">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="funding.positive">Positive Count</div>
+                <div class="stat-value" id="funding-positive">--</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label" data-i18n="funding.negative">Negative Count</div>
+                <div class="stat-value" id="funding-negative">--</div>
+              </div>
+            </div>
+
+            <!-- Funding Opportunities -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="funding.opportunities">Funding Opportunities</div>
+              <div id="funding-opps">
+                <div class="loading"><div class="spinner"></div> <span data-i18n="funding.loadingOpps">Loading funding opportunities...</span></div>
+              </div>
+            </div>
+
+            <!-- Funding Rates Table -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="funding.rates">Funding Rates</div>
+              <div style="overflow-x:auto">
+                <table class="market-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="funding.th.symbol">Symbol</th>
+                      <th data-i18n="funding.th.fundingRate">Funding Rate</th>
+                      <th data-i18n="funding.th.markPrice">Mark Price</th>
+                      <th data-i18n="funding.th.indexPrice">Index Price</th>
+                      <th data-i18n="funding.th.grossApy">Gross APY</th>
+                      <th data-i18n="funding.th.netApy">Net APY</th>
+                      <th data-i18n="funding.th.riskLevel">Risk Level</th>
+                      <th data-i18n="funding.th.nextFunding">Next Funding</th>
+                    </tr>
+                  </thead>
+                  <tbody id="funding-rates-body">
+                    <tr><td colspan="8" class="loading"><div class="spinner"></div> <span data-i18n="funding.loadingRates">Loading funding rates...</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Timestamp -->
+            <div style="margin-top:12px; text-align:center; font-size:0.85em; color:var(--text-dim)" id="funding-timestamp"></div>
           </div>
         </div>
       </div>

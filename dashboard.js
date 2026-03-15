@@ -52,6 +52,8 @@ function showPage(name) {
   else if (name === 'risk') renderAlerts();
   else if (name === 'tools') loadPaperTrades();
   else if (name === 'bsc') loadBSCData();
+  else if (name === 'whale') loadWhaleData();
+  else if (name === 'arb') loadArbitrageData();
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────
@@ -941,21 +943,355 @@ function showWelcome() {
   document.body.appendChild(overlay);
 }
 
-// ─── i18n (basic) ─────────────────────────────────────────────────────────
+// ─── Whale Tracking ──────────────────────────────────────────────────────
+async function loadWhaleData() {
+  var content = document.getElementById('whale-content');
+  if (!content) return;
+  try {
+    var data = await api('/api/whale');
+
+    // Summary stats
+    var el;
+    el = document.getElementById('whale-btc-price');
+    if (el) el.textContent = fmtUSD(data.btcPrice);
+    el = document.getElementById('whale-btc-change');
+    if (el) { el.textContent = fmtPct(data.btcChange); el.className = 'stat-change ' + (data.btcChange >= 0 ? 'up' : 'down'); }
+    el = document.getElementById('whale-volume');
+    if (el) el.textContent = data.volume24h > 1e9 ? '$' + (data.volume24h / 1e9).toFixed(1) + 'B' : fmtUSD(data.volume24h);
+    el = document.getElementById('whale-trade-count');
+    if (el) el.textContent = data.summary.tradeCount;
+    el = document.getElementById('whale-sentiment');
+    if (el) {
+      var sentMap = { bullish: ['Bullish', 'up'], bearish: ['Bearish', 'down'], neutral: ['Neutral', ''] };
+      var sm = sentMap[data.summary.sentiment] || sentMap.neutral;
+      el.textContent = t('whale.' + data.summary.sentiment) || sm[0];
+      el.className = 'stat-value ' + sm[1];
+    }
+
+    // Pressure bar
+    var pressure = document.getElementById('whale-pressure');
+    if (pressure) {
+      var buyPct = data.summary.buyRatio || 50;
+      var sellPct = data.summary.sellRatio || 50;
+      pressure.innerHTML = '<div class="pressure-bar">' +
+        '<div class="buy-bar" style="width:' + buyPct.toFixed(1) + '%">' + t('whale.buy') + ' ' + buyPct.toFixed(1) + '%</div>' +
+        '<div class="sell-bar" style="width:' + sellPct.toFixed(1) + '%">' + t('whale.sell') + ' ' + sellPct.toFixed(1) + '%</div>' +
+        '</div>';
+    }
+
+    // Large trades table
+    var tbody = document.getElementById('whale-trades-body');
+    if (tbody) {
+      if (data.largeTrades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
+      } else {
+        tbody.innerHTML = data.largeTrades.map(function(tr) {
+          return '<tr>' +
+            '<td>' + (tr.time ? new Date(tr.time).toLocaleTimeString() : '--') + '</td>' +
+            '<td><span class="side-badge ' + tr.side + '">' + tr.side.toUpperCase() + '</span></td>' +
+            '<td>' + fmtUSD(tr.price) + '</td>' +
+            '<td>' + fmt(tr.qty, 4) + '</td>' +
+            '<td style="font-weight:600">' + fmtUSD(tr.usd) + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+
+    // On-chain transactions
+    var onchainBody = document.getElementById('whale-onchain-body');
+    var blockInfo = document.getElementById('whale-block-info');
+    if (blockInfo && data.onchain) {
+      blockInfo.textContent = t('whale.block') + ' #' + fmt(data.onchain.blockHeight, 0) + ' (' + data.onchain.blockHash + ')';
+    }
+    if (onchainBody && data.onchain) {
+      if (data.onchain.transactions.length === 0) {
+        onchainBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">' + t('whale.noOnchain') + '</td></tr>';
+      } else {
+        onchainBody.innerHTML = data.onchain.transactions.map(function(tx) {
+          return '<tr>' +
+            '<td style="font-family:monospace;font-size:0.85em">' + escapeHtml(tx.hash) + '</td>' +
+            '<td style="font-weight:600">' + fmt(tx.btc, 2) + ' BTC</td>' +
+            '<td>' + fmtUSD(tx.usd) + '</td>' +
+            '<td><span class="whale-badge ' + tx.size + '">' + tx.size + '</span></td>' +
+            '<td>' + (tx.time ? new Date(tx.time).toLocaleTimeString() : '--') + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+
+    showToast(t('whale.loaded'), 'success', 2000);
+  } catch (err) {
+    document.getElementById('whale-content').innerHTML =
+      '<div class="card" style="text-align:center;padding:32px;color:var(--down)">' +
+      '<p>' + t('whale.error') + '</p><p style="color:var(--text-dim);font-size:0.85em">' + escapeHtml(err.message) + '</p></div>';
+  }
+}
+
+// ─── Arbitrage Scanner ────────────────────────────────────────────────────
+async function loadArbitrageData() {
+  try {
+    var data = await api('/api/arbitrage');
+
+    // Stats
+    var el;
+    el = document.getElementById('arb-total-coins');
+    if (el) el.textContent = data.coins.length;
+    el = document.getElementById('arb-basis-count');
+    if (el) el.textContent = data.opportunities.basis.length;
+    el = document.getElementById('arb-volatility-count');
+    if (el) el.textContent = data.opportunities.highVolatility.length;
+
+    // Basis opportunities
+    var basisEl = document.getElementById('arb-basis-opps');
+    if (basisEl) {
+      if (data.opportunities.basis.length === 0) {
+        basisEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noOpps') + '</p>';
+      } else {
+        basisEl.innerHTML = data.opportunities.basis.map(function(o) {
+          return '<div class="opp-card">' +
+            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
+            '<span class="whale-badge ' + (o.direction === 'premium' ? 'whale' : 'dolphin') + '">' + o.direction + '</span>' +
+            '<div class="opp-detail">' + t('arb.basis') + ': ' + fmtPct(o.basis) + ' | ' + t('arb.strategy') + ': ' + o.strategy.replace(/_/g, ' ') + '</div>' +
+            '</div>';
+        }).join('');
+      }
+    }
+
+    // High volatility
+    var volEl = document.getElementById('arb-volatility-opps');
+    if (volEl) {
+      if (data.opportunities.highVolatility.length === 0) {
+        volEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noVolatility') + '</p>';
+      } else {
+        volEl.innerHTML = data.opportunities.highVolatility.map(function(o) {
+          return '<div class="opp-card">' +
+            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span>' +
+            '<div class="opp-detail">' + t('arb.dayRange') + ': ' + fmt(o.dayRange, 2) + '% | ' + t('arb.change24h') + ': ' + fmtPct(o.change24h) + '</div>' +
+            '</div>';
+        }).join('');
+      }
+    }
+
+    // Coins table
+    var coinsBody = document.getElementById('arb-coins-body');
+    if (coinsBody) {
+      coinsBody.innerHTML = data.coins.map(function(c) {
+        var basisClass = Math.abs(c.basis) > 0.1 ? (c.basis > 0 ? 'up' : 'down') : '';
+        return '<tr>' +
+          '<td style="font-weight:600">' + escapeHtml(c.symbol) + '</td>' +
+          '<td>' + fmtUSD(c.spotPrice) + '</td>' +
+          '<td>' + fmtUSD(c.futuresPrice) + '</td>' +
+          '<td class="' + basisClass + '">' + fmtPct(c.basis) + '</td>' +
+          '<td>' + fmt(c.fundingRate, 4) + '%</td>' +
+          '<td class="' + (c.fundingAPY > 20 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
+          '<td>' + fmt(c.dayRange, 2) + '%</td>' +
+          '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    showToast(t('arb.loaded'), 'success', 2000);
+  } catch (err) {
+    var cont = document.getElementById('arb-scanner-tab');
+    if (cont) cont.innerHTML = '<div class="card" style="text-align:center;padding:32px;color:var(--down)">' +
+      '<p>' + t('arb.error') + '</p><p style="color:var(--text-dim);font-size:0.85em">' + escapeHtml(err.message) + '</p></div>';
+  }
+}
+
+async function loadFundingRateData() {
+  try {
+    var data = await api('/api/funding-rate');
+
+    // Sentiment summary
+    var el;
+    var sentMap = { bullish: 'up', bearish: 'down', neutral: '' };
+    el = document.getElementById('funding-sentiment');
+    if (el) { el.textContent = t('funding.' + data.marketSentiment.sentiment) || data.marketSentiment.sentiment; el.className = 'stat-value ' + (sentMap[data.marketSentiment.sentiment] || ''); }
+    el = document.getElementById('funding-avg-rate');
+    if (el) el.textContent = fmt(data.marketSentiment.averageRate, 4) + '%';
+    el = document.getElementById('funding-positive');
+    if (el) el.textContent = data.marketSentiment.positiveCount;
+    el = document.getElementById('funding-negative');
+    if (el) el.textContent = data.marketSentiment.negativeCount;
+
+    // Opportunities
+    var oppsEl = document.getElementById('funding-opps');
+    if (oppsEl) {
+      if (data.opportunities.length === 0) {
+        oppsEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('funding.noOpps') + '</p>';
+      } else {
+        oppsEl.innerHTML = data.opportunities.map(function(o) {
+          return '<div class="opp-card">' +
+            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
+            '<span class="risk-badge ' + o.riskLevel + '">' + o.riskLevel + '</span>' +
+            '<div class="opp-detail">' + t('funding.rate') + ': ' + fmt(o.fundingRate, 4) + '% | APY: ' + fmt(o.grossAPY, 1) + '% | ' + t('funding.monthly') + ': $' + fmt(o.monthlyYield, 0) + '</div>' +
+            '</div>';
+        }).join('');
+      }
+    }
+
+    // Rates table
+    var ratesBody = document.getElementById('funding-rates-body');
+    if (ratesBody) {
+      ratesBody.innerHTML = data.rates.map(function(r) {
+        return '<tr>' +
+          '<td style="font-weight:600">' + escapeHtml(r.symbol) + '</td>' +
+          '<td class="' + (r.fundingRate > 0 ? 'up' : r.fundingRate < 0 ? 'down' : '') + '">' + fmt(r.fundingRate, 4) + '%</td>' +
+          '<td>' + fmtUSD(r.markPrice) + '</td>' +
+          '<td>' + fmtUSD(r.indexPrice) + '</td>' +
+          '<td>' + fmt(r.grossAPY, 1) + '%</td>' +
+          '<td>' + fmt(r.netAPY, 1) + '%</td>' +
+          '<td><span class="risk-badge ' + r.riskLevel + '">' + r.riskLevel + '</span></td>' +
+          '<td>' + new Date(r.nextFundingTime).toLocaleTimeString() + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    showToast(t('funding.loaded'), 'success', 2000);
+  } catch (err) {
+    var cont = document.getElementById('arb-funding-tab');
+    if (cont) cont.innerHTML = '<div class="card" style="text-align:center;padding:32px;color:var(--down)">' +
+      '<p>' + t('funding.error') + '</p><p style="color:var(--text-dim);font-size:0.85em">' + escapeHtml(err.message) + '</p></div>';
+  }
+}
+
+function showArbTab() {
+  document.getElementById('arb-scanner-tab').style.display = '';
+  document.getElementById('arb-funding-tab').style.display = 'none';
+  document.querySelectorAll('.arb-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelector('[data-action="showArbTab"]').classList.add('active');
+  loadArbitrageData();
+}
+
+function showFundingTab() {
+  document.getElementById('arb-scanner-tab').style.display = 'none';
+  document.getElementById('arb-funding-tab').style.display = '';
+  document.querySelectorAll('.arb-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelector('[data-action="showFundingTab"]').classList.add('active');
+  loadFundingRateData();
+}
+
+// ─── i18n ─────────────────────────────────────────────────────────────────
+var currentLang = 'en';
 var i18n = {
-  en: { dashboard: 'Dashboard', market: 'Market', portfolio: 'Portfolio', sentiment: 'Sentiment', risk: 'Risk Control', tools: 'Tools', ai: 'AI Chat' },
-  zh: { dashboard: '仪表盘', market: '行情', portfolio: '投资组合', sentiment: '市场情绪', risk: '风险控制', tools: '工具', ai: 'AI 对话' },
+  en: {
+    // Nav
+    'nav.dashboard': 'Dashboard', 'nav.market': 'Market', 'nav.portfolio': 'Portfolio',
+    'nav.sentiment': 'Sentiment', 'nav.risk': 'Risk Control', 'nav.tools': 'Tools',
+    'nav.whale': 'Whale Tracking', 'nav.arb': 'Arbitrage', 'nav.bsc': 'BNB Chain', 'nav.ai': 'AI Chat',
+    // Headers
+    'h.whale': 'Whale Tracking', 'h.arb': 'Arbitrage Scanner',
+    // Whale page
+    'whale.btcPrice': 'BTC Price', 'whale.volume': '24h Volume', 'whale.tradeCount': 'Large Trades',
+    'whale.sentiment': 'Sentiment', 'whale.pressure': 'Buy/Sell Pressure',
+    'whale.buy': 'Buy', 'whale.sell': 'Sell',
+    'whale.bullish': 'Bullish', 'whale.bearish': 'Bearish', 'whale.neutral': 'Neutral',
+    'whale.trades': 'Binance Large Trades (>$500K)', 'whale.onchain': 'On-Chain BTC Transactions (≥100 BTC)',
+    'whale.time': 'Time', 'whale.side': 'Side', 'whale.price': 'Price', 'whale.qty': 'Quantity', 'whale.usdValue': 'USD Value',
+    'whale.hash': 'TX Hash', 'whale.btcAmount': 'BTC', 'whale.size': 'Size',
+    'whale.legend': 'Size Legend',
+    'whale.legendWhale': 'Whale: ≥1,000 BTC', 'whale.legendShark': 'Shark: ≥500 BTC', 'whale.legendDolphin': 'Dolphin: ≥100 BTC',
+    'whale.noTrades': 'No large trades detected', 'whale.noOnchain': 'No large on-chain transactions found',
+    'whale.loaded': 'Whale data updated', 'whale.error': 'Failed to load whale data',
+    'whale.block': 'Block',
+    // Arb page
+    'arb.scanner': 'Arbitrage Scanner', 'arb.funding': 'Funding Rates',
+    'arb.totalCoins': 'Coins Scanned', 'arb.basisOpps': 'Basis Opportunities', 'arb.volatility': 'High Volatility',
+    'arb.basisTitle': 'Basis Arbitrage Opportunities', 'arb.volatilityTitle': 'High Volatility Coins',
+    'arb.coinsTable': 'All Coins', 'arb.symbol': 'Symbol', 'arb.spotPrice': 'Spot', 'arb.futuresPrice': 'Futures',
+    'arb.basis': 'Basis', 'arb.fundingRate': 'Funding', 'arb.apy': 'APY', 'arb.dayRange': 'Day Range', 'arb.volumeCol': 'Volume',
+    'arb.change24h': '24h Change', 'arb.strategy': 'Strategy',
+    'arb.noOpps': 'No basis opportunities detected', 'arb.noVolatility': 'No high volatility coins',
+    'arb.loaded': 'Arbitrage data updated', 'arb.error': 'Failed to load arbitrage data',
+    // Funding page
+    'funding.title': 'Funding Rate Analysis', 'funding.sentimentLabel': 'Market Sentiment',
+    'funding.avgRate': 'Avg Rate', 'funding.positive': 'Positive', 'funding.negative': 'Negative',
+    'funding.oppsTitle': 'Funding Opportunities', 'funding.ratesTable': 'All Funding Rates',
+    'funding.rate': 'Rate', 'funding.markPrice': 'Mark Price', 'funding.indexPrice': 'Index Price',
+    'funding.grossAPY': 'Gross APY', 'funding.netAPY': 'Net APY', 'funding.risk': 'Risk', 'funding.nextFunding': 'Next Funding',
+    'funding.monthly': 'Monthly Yield',
+    'funding.bullish': 'Bullish', 'funding.bearish': 'Bearish', 'funding.neutral': 'Neutral',
+    'funding.noOpps': 'No funding opportunities', 'funding.loaded': 'Funding data updated', 'funding.error': 'Failed to load funding data',
+    // Common
+    'btn.refresh': 'Refresh',
+  },
+  zh: {
+    // Nav
+    'nav.dashboard': '仪表盘', 'nav.market': '行情', 'nav.portfolio': '投资组合',
+    'nav.sentiment': '市场情绪', 'nav.risk': '风险控制', 'nav.tools': '工具',
+    'nav.whale': '巨鲸追踪', 'nav.arb': '套利扫描', 'nav.bsc': 'BNB链', 'nav.ai': 'AI 对话',
+    // Headers
+    'h.whale': '巨鲸追踪', 'h.arb': '套利扫描',
+    // Whale
+    'whale.btcPrice': 'BTC 价格', 'whale.volume': '24h 成交量', 'whale.tradeCount': '大额交易',
+    'whale.sentiment': '市场情绪', 'whale.pressure': '买卖压力',
+    'whale.buy': '买入', 'whale.sell': '卖出',
+    'whale.bullish': '看涨', 'whale.bearish': '看跌', 'whale.neutral': '中性',
+    'whale.trades': '币安大额交易 (>$50万)', 'whale.onchain': '链上BTC大额交易 (≥100 BTC)',
+    'whale.time': '时间', 'whale.side': '方向', 'whale.price': '价格', 'whale.qty': '数量', 'whale.usdValue': 'USD价值',
+    'whale.hash': '交易哈希', 'whale.btcAmount': 'BTC数量', 'whale.size': '规模',
+    'whale.legend': '规模图例',
+    'whale.legendWhale': '鲸鱼: ≥1,000 BTC', 'whale.legendShark': '鲨鱼: ≥500 BTC', 'whale.legendDolphin': '海豚: ≥100 BTC',
+    'whale.noTrades': '未检测到大额交易', 'whale.noOnchain': '未发现大额链上交易',
+    'whale.loaded': '巨鲸数据已更新', 'whale.error': '加载巨鲸数据失败',
+    'whale.block': '区块',
+    // Arb
+    'arb.scanner': '套利扫描', 'arb.funding': '资金费率',
+    'arb.totalCoins': '扫描币种', 'arb.basisOpps': '基差机会', 'arb.volatility': '高波动',
+    'arb.basisTitle': '基差套利机会', 'arb.volatilityTitle': '高波动币种',
+    'arb.coinsTable': '全部币种', 'arb.symbol': '币种', 'arb.spotPrice': '现货', 'arb.futuresPrice': '合约',
+    'arb.basis': '基差', 'arb.fundingRate': '资金费率', 'arb.apy': '年化', 'arb.dayRange': '日内波幅', 'arb.volumeCol': '成交量',
+    'arb.change24h': '24h涨跌', 'arb.strategy': '策略',
+    'arb.noOpps': '未检测到基差机会', 'arb.noVolatility': '无高波动币种',
+    'arb.loaded': '套利数据已更新', 'arb.error': '加载套利数据失败',
+    // Funding
+    'funding.title': '资金费率分析', 'funding.sentimentLabel': '市场情绪',
+    'funding.avgRate': '平均费率', 'funding.positive': '正费率', 'funding.negative': '负费率',
+    'funding.oppsTitle': '资金费率机会', 'funding.ratesTable': '全部资金费率',
+    'funding.rate': '费率', 'funding.markPrice': '标记价格', 'funding.indexPrice': '指数价格',
+    'funding.grossAPY': '毛年化', 'funding.netAPY': '净年化', 'funding.risk': '风险', 'funding.nextFunding': '下次结算',
+    'funding.monthly': '月收益',
+    'funding.bullish': '看涨', 'funding.bearish': '看跌', 'funding.neutral': '中性',
+    'funding.noOpps': '无资金费率机会', 'funding.loaded': '资金费率数据已更新', 'funding.error': '加载资金费率失败',
+    // Common
+    'btn.refresh': '刷新',
+  },
 };
+
+function t(key) {
+  return (i18n[currentLang] && i18n[currentLang][key]) || (i18n.en && i18n.en[key]) || key;
+}
+
 function setLang(lang) {
   if (!i18n[lang]) return;
+  currentLang = lang;
+
+  // Update toggle buttons
   document.querySelectorAll('.lang-toggle button').forEach(function(b) { b.classList.remove('active'); });
   document.querySelectorAll('.lang-toggle button').forEach(function(b) {
     if (b.textContent.trim() === (lang === 'en' ? 'EN' : '中文')) b.classList.add('active');
   });
-  var t = i18n[lang];
-  var navItems = document.querySelectorAll('.nav-item .nav-text');
-  var keys = Object.keys(t);
-  navItems.forEach(function(el, i) { if (keys[i] && t[keys[i]]) el.textContent = t[keys[i]]; });
+
+  // Update nav items by matching data-page attribute to nav.* keys
+  document.querySelectorAll('.nav-item[data-page]').forEach(function(item) {
+    var page = item.dataset.page;
+    var textEl = item.querySelector('.nav-text');
+    var key = 'nav.' + page;
+    if (textEl && i18n[lang][key]) textEl.textContent = i18n[lang][key];
+  });
+
+  // Update all elements with data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.dataset.i18n;
+    if (i18n[lang][key]) el.textContent = i18n[lang][key];
+  });
+
+  // Update placeholders
+  document.querySelectorAll('[data-i18n-ph]').forEach(function(el) {
+    var key = el.dataset['i18nPh'];
+    if (i18n[lang][key]) el.placeholder = i18n[lang][key];
+  });
+
   localStorage.setItem('am_lang', lang);
 }
 
@@ -983,7 +1319,7 @@ document.addEventListener('keydown', function(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey) return;
 
-  var pageMap = { '1': 'dashboard', '2': 'market', '3': 'portfolio', '4': 'sentiment', '5': 'risk', '6': 'tools', '7': 'ai', '8': 'bsc' };
+  var pageMap = { '1': 'dashboard', '2': 'market', '3': 'portfolio', '4': 'sentiment', '5': 'risk', '6': 'tools', '7': 'whale', '8': 'arb', '9': 'bsc', '0': 'ai' };
   if (pageMap[e.key]) { e.preventDefault(); showPage(pageMap[e.key]); return; }
   if (e.key === 'r') {
     e.preventDefault();
@@ -993,6 +1329,8 @@ document.addEventListener('keydown', function(e) {
       if (id === 'dashboard') loadDashboard();
       else if (id === 'market') { loadMarketTable(); loadMarketChart(); }
       else if (id === 'bsc') loadBSCData();
+      else if (id === 'whale') loadWhaleData();
+      else if (id === 'arb') loadArbitrageData();
       showToast('Refreshed', 'success', 1500);
     }
     return;
@@ -1027,6 +1365,10 @@ document.addEventListener('click', function(e) {
       'paperTradeSell': function() { paperTrade('sell'); },
       'resetPaperTrading': resetPaperTrading,
       'loadBSCData': loadBSCData,
+      'loadWhaleData': loadWhaleData,
+      'loadArbitrageData': loadArbitrageData,
+      'showArbTab': showArbTab,
+      'showFundingTab': showFundingTab,
       'sendChat': sendChat,
       'mobileToggle': function() { document.querySelector('.sidebar').classList.toggle('open'); },
       'langEn': function() { setLang('en'); },
@@ -1088,7 +1430,7 @@ connectSSE();
 
 // Restore language
 var savedLang = localStorage.getItem('am_lang');
-if (savedLang && savedLang !== 'en') setLang(savedLang);
+if (savedLang) setLang(savedLang);
 
 // Auto-refresh every 30 seconds
 setInterval(function() {
