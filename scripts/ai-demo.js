@@ -6,8 +6,8 @@
 
 const http = require('http');
 
-const GATEWAY_URL = '127.0.0.1:18789';
-const AUTH_TOKEN = '6837de2834945b072c98a334e5f17377a1fbbf53757cf957';
+const GATEWAY_URL = process.env.OPENCLAW_GATEWAY || '127.0.0.1:18789';
+const AUTH_TOKEN = process.env.OPENCLAW_AUTH_TOKEN || '';
 
 async function sendMessage(message, sessionKey = 'agent:main:main') {
   return new Promise((resolve, reject) => {

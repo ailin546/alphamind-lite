@@ -16,6 +16,8 @@ const DEFAULT_DATA = {
   alerts: [],
   watchlist: ['BTC', 'ETH', 'BNB', 'SOL'],
   dcaPlans: [],
+  paperTrades: [],
+  paperBalance: 10000, // Start with $10,000 USDT
   priceHistory: {},
   settings: {
     currency: 'USDT',
@@ -41,7 +43,9 @@ function load() {
   if (_cache) return _cache;
   ensureDir();
   try {
-    _cache = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    // Merge with defaults to handle schema upgrades (new fields)
+    _cache = { ...DEFAULT_DATA, ...raw, settings: { ...DEFAULT_DATA.settings, ...(raw.settings || {}) }, _meta: { ...DEFAULT_DATA._meta, ...(raw._meta || {}) } };
     return _cache;
   } catch (err) {
     if (err.code !== 'ENOENT') {
@@ -120,7 +124,7 @@ function getAlerts() {
 
 function addAlert(symbol, price, direction) {
   const db = load();
-  const id = Date.now().toString(36);
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const alert = {
     id,
     symbol: symbol.toUpperCase(),
@@ -222,6 +226,51 @@ function resetAll() {
   save();
 }
 
+// ---- Paper Trading ----
+function getPaperTrades() {
+  return load().paperTrades.map(t => ({ ...t }));
+}
+
+function getPaperBalance() {
+  return load().paperBalance || 10000;
+}
+
+function addPaperTrade(symbol, side, quantity, price) {
+  const db = load();
+  const cost = quantity * price;
+  if (side === 'buy' && cost > db.paperBalance) return null;
+
+  const trade = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    symbol: symbol.toUpperCase(),
+    side,
+    quantity,
+    price,
+    cost,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (side === 'buy') {
+    db.paperBalance -= cost;
+  } else {
+    db.paperBalance += cost;
+  }
+
+  db.paperTrades.push(trade);
+  // Keep last 500 trades
+  if (db.paperTrades.length > 500) db.paperTrades = db.paperTrades.slice(-500);
+  save();
+  return { trade, balance: db.paperBalance };
+}
+
+function resetPaperTrading() {
+  const db = load();
+  db.paperTrades = [];
+  db.paperBalance = 10000;
+  save();
+  return { balance: 10000 };
+}
+
 module.exports = {
   load, save,
   getPortfolio, addHolding, removeHolding, updateHolding,
@@ -229,6 +278,7 @@ module.exports = {
   getWatchlist, setWatchlist,
   getDCAPlans, addDCAPlan,
   recordPrice, getPriceHistory,
+  getPaperTrades, getPaperBalance, addPaperTrade, resetPaperTrading,
   getSettings, updateSettings,
   resetAll,
 };

@@ -1,6 +1,6 @@
 {
   "name": "alphamind-lite",
-  "version": "9.2.0",
+  "version": "10.15.0",
   "description": "AI-powered cryptocurrency investment assistant with real-time market analysis, portfolio management, and intelligent trading advice",
   "main": "scripts/server.js",
   "scripts": {
@@ -31,7 +31,11 @@
     "portfolio",
     "risk-management",
     "market-analysis",
-    "bnb-chain"
+    "bnb-chain",
+    "bsc",
+    "technical-indicators",
+    "rsi",
+    "defi"
   ],
   "author": "AlphaMind Team",
   "license": "MIT",

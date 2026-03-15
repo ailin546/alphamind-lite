@@ -1,415 +1,57 @@
 #!/usr/bin/env node
 /**
  * AlphaMind Lite - Production HTTP Server
- * 提供 REST API、健康检查、静态页面服务
+ * Modular router with graceful shutdown
  * Zero dependencies - pure Node.js
  */
 
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const crypto = require('crypto');
 const { getLogger, createLogger } = require('./logger');
-const { fetchMarketData, fetchFearGreedIndex, fetchMultiplePrices, fetchFundingRates } = require('./api-client');
-const db = require('./db');
+const { config, checkRateLimit, sendJSON, metrics, cacheCleanupTimer, rateLimitCleanupTimer } = require('./middleware');
+
+// Route modules
+const { handleHealth, handleReadiness, handleMetrics, serveStatic } = require('./routes-health');
+const { handleMarket, handleSentiment, handleSentimentAnalysis, handleCorrelation, handleKlines, handleIndicators, handleMultiTimeframe } = require('./routes-market');
+const { handlePortfolio, handlePortfolioAdd, handlePortfolioRemove, handleAlerts, handleAlertAdd, handleAlertRemove, handleFunding } = require('./routes-portfolio');
+const { handleRisk, handleDCA, handlePaperTrade, handlePaperTradeHistory, handlePaperTradeReset, handleLatestPrices, setLastPrices } = require('./routes-trading');
+const { handleAIChat } = require('./routes-ai-chat');
+const { handleBSCData } = require('./routes-bsc');
+const { handleSSE, heartbeatTimer, broadcastTimer, drainClients, onPricesUpdate } = require('./sse');
 
 createLogger({ context: 'server' });
 const log = getLogger('server');
 
-const PKG_VERSION = require('../package.json').version;
-const STATIC_ROOT = path.resolve(__dirname, '..');
+// Wire SSE price updates to trading module's price cache
+onPricesUpdate(setLastPrices);
 
-let config;
-try {
-  config = require('../config/config');
-} catch {
-  config = { server: { port: 3000, host: '0.0.0.0' }, rateLimit: { windowMs: 60000, maxRequests: 100 } };
-}
-
-// ---- Rate Limiter ----
-const rateLimiter = new Map();
-
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const window = config.rateLimit.windowMs;
-  const max = config.rateLimit.maxRequests;
-
-  if (!rateLimiter.has(ip)) {
-    rateLimiter.set(ip, { count: 1, start: now });
-    return true;
-  }
-
-  const entry = rateLimiter.get(ip);
-  if (now - entry.start > window) {
-    entry.count = 1;
-    entry.start = now;
-    return true;
-  }
-
-  entry.count++;
-  return entry.count <= max;
-}
-
-// Clean up rate limiter periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of rateLimiter) {
-    if (now - entry.start > config.rateLimit.windowMs * 2) {
-      rateLimiter.delete(ip);
-    }
-  }
-}, 60000);
-
-// ---- Metrics ----
-const metrics = {
-  startTime: Date.now(),
-  requests: 0,
-  errors: 0,
-  lastHealthCheck: null,
-};
-
-// ---- Content Types ----
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-};
-
-// ---- Route Handlers ----
-function sendJSON(res, statusCode, data) {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
-    'X-XSS-Protection': '1; mode=block',
-  });
-  res.end(JSON.stringify(data));
-}
-
-async function handleHealth(req, res) {
-  const uptime = Math.floor((Date.now() - metrics.startTime) / 1000);
-  const memUsage = process.memoryUsage();
-
-  const health = {
-    status: 'ok',
-    version: PKG_VERSION,
-    uptime,
-    timestamp: new Date().toISOString(),
-    memory: {
-      rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
-      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
-      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB',
-    },
-    metrics: {
-      totalRequests: metrics.requests,
-      totalErrors: metrics.errors,
-    },
-  };
-
-  metrics.lastHealthCheck = new Date().toISOString();
-  sendJSON(res, 200, health);
-}
-
-// Cached readiness result (TTL 30s to avoid hitting Binance on every k8s probe)
-let _readyCache = { ready: false, checkedAt: 0 };
-const READY_TTL = 30000;
-
-async function handleReadiness(req, res) {
-  const now = Date.now();
-  if (now - _readyCache.checkedAt < READY_TTL) {
-    sendJSON(res, _readyCache.ready ? 200 : 503, { status: _readyCache.ready ? 'ready' : 'not ready' });
-    return;
-  }
-  try {
-    await fetchMarketData('BTCUSDT');
-    _readyCache = { ready: true, checkedAt: now };
-    sendJSON(res, 200, { status: 'ready' });
-  } catch {
-    _readyCache = { ready: false, checkedAt: now };
-    sendJSON(res, 503, { status: 'not ready', reason: 'API unreachable' });
-  }
-}
-
-async function handleMarket(req, res) {
-  try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const symbol = url.searchParams.get('symbol') || 'BTCUSDT';
-
-    // Validate symbol (alphanumeric only)
-    if (!/^[A-Z0-9]{2,20}$/i.test(symbol)) {
-      sendJSON(res, 400, { error: 'Invalid symbol' });
-      return;
-    }
-
-    const data = await fetchMarketData(symbol.toUpperCase());
-    sendJSON(res, 200, { symbol: symbol.toUpperCase(), ...data });
-  } catch (err) {
-    log.error('Market data error', { error: err.message });
-    metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to fetch market data' });
-  }
-}
-
-async function handleSentiment(req, res) {
-  try {
-    const data = await fetchFearGreedIndex();
-    sendJSON(res, 200, data);
-  } catch (err) {
-    log.error('Sentiment data error', { error: err.message });
-    metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to fetch sentiment data' });
-  }
-}
-
-async function handleMetrics(req, res) {
-  const uptime = Math.floor((Date.now() - metrics.startTime) / 1000);
-  const mem = process.memoryUsage();
-
-  // Prometheus-compatible format
-  const lines = [
-    `# HELP alphamind_uptime_seconds Application uptime`,
-    `# TYPE alphamind_uptime_seconds gauge`,
-    `alphamind_uptime_seconds ${uptime}`,
-    `# HELP alphamind_requests_total Total HTTP requests`,
-    `# TYPE alphamind_requests_total counter`,
-    `alphamind_requests_total ${metrics.requests}`,
-    `# HELP alphamind_errors_total Total errors`,
-    `# TYPE alphamind_errors_total counter`,
-    `alphamind_errors_total ${metrics.errors}`,
-    `# HELP alphamind_memory_rss_bytes RSS memory usage`,
-    `# TYPE alphamind_memory_rss_bytes gauge`,
-    `alphamind_memory_rss_bytes ${mem.rss}`,
-    `# HELP alphamind_memory_heap_used_bytes Heap memory used`,
-    `# TYPE alphamind_memory_heap_used_bytes gauge`,
-    `alphamind_memory_heap_used_bytes ${mem.heapUsed}`,
-  ];
-
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end(lines.join('\n') + '\n');
-}
-
-function serveStatic(req, res) {
-  const urlPath = req.url.split('?')[0];
-  const filePath = urlPath === '/'
-    ? path.join(STATIC_ROOT, 'index.html')
-    : path.resolve(STATIC_ROOT, '.' + path.normalize(urlPath));
-
-  // Prevent path traversal: resolved path must be within STATIC_ROOT
-  if (!filePath.startsWith(STATIC_ROOT + path.sep) && filePath !== path.join(STATIC_ROOT, 'index.html')) {
-    sendJSON(res, 403, { error: 'Forbidden' });
-    return;
-  }
-
-  const ext = path.extname(filePath).toLowerCase();
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-
-  fs.readFile(filePath, (err, content) => {
-    if (err) {
-      sendJSON(res, 404, { error: 'Not found' });
-      return;
-    }
-    res.writeHead(200, {
-      'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=3600',
-      'X-Content-Type-Options': 'nosniff',
-    });
-    res.end(content);
-  });
-}
-
-// ---- Portfolio API ----
-async function handlePortfolio(req, res) {
-  try {
-    const portfolio = db.getPortfolio();
-    if (portfolio.length === 0) {
-      sendJSON(res, 200, { holdings: [], totalValue: 0, totalCost: 0, totalPnl: 0, totalPnlPercent: 0 });
-      return;
-    }
-
-    const symbols = portfolio.map(p => p.symbol);
-    const prices = await fetchMultiplePrices(symbols);
-    const priceMap = {};
-    prices.forEach(p => { if (p.price) priceMap[p.symbol] = p.price; });
-
-    let totalValue = 0, totalCost = 0;
-    const holdings = [];
-
-    for (const p of portfolio) {
-      const price = priceMap[p.symbol];
-      if (!price) continue;
-      const value = p.amount * price;
-      const cost = p.amount * p.avgPrice;
-      const pnl = value - cost;
-      const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0;
-      totalValue += value;
-      totalCost += cost;
-      holdings.push({ symbol: p.symbol, amount: p.amount, avgPrice: p.avgPrice, currentPrice: price, value, cost, pnl, pnlPercent });
-    }
-
-    const totalPnl = totalValue - totalCost;
-    const totalPnlPercent = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
-    sendJSON(res, 200, { holdings, totalValue, totalCost, totalPnl, totalPnlPercent });
-  } catch (err) {
-    log.error('Portfolio error', { error: err.message });
-    metrics.errors++;
-    sendJSON(res, 500, { error: 'Failed to load portfolio' });
-  }
-}
-
-// ---- Body Parser Helper ----
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk;
-      if (body.length > 1e5) { req.destroy(); reject(new Error('Body too large')); }
-    });
-    req.on('end', () => {
-      try { resolve(JSON.parse(body)); } catch { reject(new Error('Invalid JSON')); }
-    });
-    req.on('error', reject);
-  });
-}
-
-// ---- Portfolio Mutation API ----
-async function handlePortfolioAdd(req, res) {
-  try {
-    const { symbol, amount, avgPrice } = await readBody(req);
-    if (!symbol || typeof symbol !== 'string') return sendJSON(res, 400, { error: 'symbol required' });
-    const amt = parseFloat(amount);
-    const price = parseFloat(avgPrice);
-    if (isNaN(amt) || amt <= 0) return sendJSON(res, 400, { error: 'Invalid amount' });
-    if (isNaN(price) || price <= 0) return sendJSON(res, 400, { error: 'Invalid avgPrice' });
-    db.addHolding(symbol.toUpperCase(), amt, price);
-    sendJSON(res, 200, { ok: true, message: `Added ${symbol.toUpperCase()}` });
-  } catch (err) {
-    sendJSON(res, 400, { error: err.message });
-  }
-}
-
-async function handlePortfolioRemove(req, res) {
-  try {
-    const { symbol } = await readBody(req);
-    if (!symbol) return sendJSON(res, 400, { error: 'symbol required' });
-    const result = db.removeHolding(symbol.toUpperCase());
-    if (!result) return sendJSON(res, 404, { error: `${symbol.toUpperCase()} not found` });
-    sendJSON(res, 200, { ok: true, message: `Removed ${symbol.toUpperCase()}` });
-  } catch (err) {
-    sendJSON(res, 400, { error: err.message });
-  }
-}
-
-// ---- Alerts API ----
-function handleAlerts(req, res) {
-  const alerts = db.getAlerts();
-  sendJSON(res, 200, { alerts });
-}
-
-async function handleAlertAdd(req, res) {
-  try {
-    const { symbol, price, direction } = await readBody(req);
-    if (!symbol || typeof symbol !== 'string') return sendJSON(res, 400, { error: 'symbol required' });
-    const p = parseFloat(price);
-    if (isNaN(p) || p <= 0) return sendJSON(res, 400, { error: 'Invalid price' });
-    if (!['above', 'below'].includes(direction)) return sendJSON(res, 400, { error: 'direction must be above or below' });
-    const alert = db.addAlert(symbol.toUpperCase(), p, direction);
-    sendJSON(res, 200, { ok: true, alert });
-  } catch (err) {
-    sendJSON(res, 400, { error: err.message });
-  }
-}
-
-async function handleAlertRemove(req, res) {
-  try {
-    const { id } = await readBody(req);
-    if (!id) return sendJSON(res, 400, { error: 'id required' });
-    const result = db.removeAlert(id);
-    if (!result) return sendJSON(res, 404, { error: 'Alert not found' });
-    sendJSON(res, 200, { ok: true });
-  } catch (err) {
-    sendJSON(res, 400, { error: err.message });
-  }
-}
-
-// ---- Funding Rates API ----
-async function handleFunding(req, res) {
-  try {
-    const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
-    const results = await Promise.all(
-      symbols.map(s => fetchFundingRates(s).then(d => ({
-        symbol: s,
-        rate: parseFloat(d.lastFundingRate),
-        markPrice: parseFloat(d.markPrice),
-        apy: parseFloat(d.lastFundingRate) * 3 * 365 * 100,
-      })).catch(() => null))
-    );
-    const rates = results.filter(Boolean).sort((a, b) => Math.abs(b.rate) - Math.abs(a.rate));
-    sendJSON(res, 200, { rates });
-  } catch (err) {
-    log.error('Funding error', { error: err.message });
-    metrics.errors++;
-    sendJSON(res, 502, { error: 'Failed to fetch funding rates' });
-  }
-}
-
-// ---- SSE Stream ----
-const sseClients = new Set();
-
-function handleSSE(req, res) {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
-
-  res.write('event: connected\ndata: ok\n\n');
-  sseClients.add(res);
-
-  req.on('close', () => { sseClients.delete(res); });
-}
-
-// Broadcast prices every 15s to SSE clients (with overlap guard)
-let _sseBroadcasting = false;
-
-setInterval(async () => {
-  if (sseClients.size === 0 || _sseBroadcasting) return;
-  _sseBroadcasting = true;
-  try {
-    const symbols = ['BTC', 'ETH', 'BNB', 'SOL'];
-    const results = await Promise.all(
-      symbols.map(s => fetchMarketData(`${s}USDT`).then(d => ({
-        symbol: s,
-        price: parseFloat(d.lastPrice),
-        change: parseFloat(d.priceChangePercent),
-      })).catch(() => null))
-    );
-    const data = results.filter(Boolean);
-    const msg = `event: prices\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const client of sseClients) {
-      try { client.write(msg); } catch { sseClients.delete(client); }
-    }
-  } catch {} finally {
-    _sseBroadcasting = false;
-  }
-}, 15000);
-
-// ---- Router ----
+// ---- Route Table ----
 const routes = {
   'GET /health': handleHealth,
   'GET /ready': handleReadiness,
   'GET /api/market': handleMarket,
-  'GET /api/sentiment': handleSentiment,
+  'GET /api/sentiment': handleSentimentAnalysis,
+  'GET /api/fear-greed': handleSentiment,
+  'GET /api/correlation': handleCorrelation,
+  'GET /api/klines': handleKlines,
   'GET /api/portfolio': handlePortfolio,
+  'POST /api/portfolio': handlePortfolio,
   'GET /api/alerts': handleAlerts,
   'POST /api/portfolio/add': handlePortfolioAdd,
   'POST /api/portfolio/remove': handlePortfolioRemove,
   'POST /api/alerts/add': handleAlertAdd,
   'POST /api/alerts/remove': handleAlertRemove,
   'GET /api/funding': handleFunding,
+  'POST /api/risk': handleRisk,
+  'POST /api/dca': handleDCA,
+  'POST /api/ai-chat': handleAIChat,
+  'POST /api/paper-trade': handlePaperTrade,
+  'GET /api/paper-trade': handlePaperTradeHistory,
+  'POST /api/paper-trade/reset': handlePaperTradeReset,
+  'GET /api/bsc': handleBSCData,
+  'GET /api/indicators': handleIndicators,
+  'GET /api/multi-timeframe': handleMultiTimeframe,
+  'GET /api/prices': handleLatestPrices,
   'GET /api/stream': handleSSE,
   'GET /metrics': handleMetrics,
 };
@@ -417,8 +59,14 @@ const routes = {
 // ---- Server ----
 const server = http.createServer(async (req, res) => {
   metrics.requests++;
+  const requestId = crypto.randomUUID();
+  res.setHeader('X-Request-ID', requestId);
 
-  const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
+  // Only trust X-Forwarded-For when behind a trusted proxy
+  const trustProxy = config.server.trustProxy || false;
+  const clientIP = trustProxy
+    ? (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress)
+    : req.socket.remoteAddress;
 
   // Rate limiting
   if (!checkRateLimit(clientIP)) {
@@ -428,7 +76,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const corsOrigin = process.env.CORS_ORIGIN;
+  const allowedOrigin = corsOrigin || (req.headers.origin && req.headers.host && req.headers.origin.includes(req.headers.host) ? req.headers.origin : 'null');
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -467,6 +117,15 @@ function shutdown(signal) {
 
   log.info(`Received ${signal}, starting graceful shutdown...`);
 
+  // Clear all intervals
+  clearInterval(cacheCleanupTimer);
+  clearInterval(rateLimitCleanupTimer);
+  clearInterval(heartbeatTimer);
+  clearInterval(broadcastTimer);
+
+  // Drain SSE clients
+  drainClients();
+
   // Stop accepting new connections
   server.close(() => {
     log.info('Server closed, exiting');
@@ -502,10 +161,12 @@ process.on('unhandledRejection', (reason) => {
 const PORT = config.server.port;
 const HOST = config.server.host;
 
+server.timeout = 30000;
+server.requestTimeout = 10000;
+
 server.listen(PORT, HOST, () => {
   log.info(`AlphaMind Lite server running`, { host: HOST, port: PORT, env: config.env });
 
-  // Validate config on startup
   const warnings = config.validate ? config.validate() : [];
   warnings.forEach(w => log.warn(`Config: ${w}`));
 });

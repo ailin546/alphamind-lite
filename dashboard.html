@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AlphaMind Lite | AI Crypto Trading Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb" crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #0b0e17;
@@ -111,8 +111,23 @@
     }
     .btn-primary:hover { background: #00c965; }
     /* Page sections */
-    .page { display: none; }
-    .page.active { display: block; }
+    .page { display: none; opacity: 0; }
+    .page.active { display: block; animation: fadeIn 0.3s ease forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    /* Price flash animation */
+    .price-flash-up { animation: flashUp 0.6s ease; }
+    .price-flash-down { animation: flashDown 0.6s ease; }
+    @keyframes flashUp { 0% { color: var(--up); background: rgba(0,230,118,0.15); } 100% { color: inherit; background: transparent; } }
+    @keyframes flashDown { 0% { color: var(--down); background: rgba(255,82,82,0.15); } 100% { color: inherit; background: transparent; } }
+    /* Loading skeleton */
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .skeleton { background: linear-gradient(90deg, var(--bg-hover) 25%, var(--border) 50%, var(--bg-hover) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; color: transparent !important; }
+    /* Status dot */
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.live { background: var(--up); box-shadow: 0 0 6px var(--up); }
+    .status-dot.demo { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+    /* Focus visible */
+    .nav-item:focus-visible, .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
     /* Cards */
     .card {
       background: var(--bg-card);
@@ -409,6 +424,10 @@
       cursor: pointer;
       font-size: 1.2em;
     }
+    @media (max-width: 1024px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .dca-result { grid-template-columns: repeat(2, 1fr); }
+    }
     @media (max-width: 768px) {
       .mobile-toggle { display: block; }
       .sidebar { transform: translateX(-100%); }
@@ -417,6 +436,8 @@
       .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
       .pf-summary { grid-template-columns: repeat(2, 1fr); }
       .form-row { flex-direction: column; }
+      .dca-result { grid-template-columns: 1fr; }
+      .tabs { flex-wrap: wrap; }
     }
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
@@ -459,51 +480,89 @@
     .signal-buy { background: rgba(0,230,118,0.15); color: var(--up); }
     .signal-sell { background: rgba(255,82,82,0.15); color: var(--down); }
     .signal-hold { background: rgba(255,171,0,0.15); color: var(--warning); }
+    /* Toast notifications */
+    .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast { padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 0.85em; animation: slideIn 0.3s ease; max-width: 380px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .toast-success { background: rgba(0,230,118,0.9); }
+    .toast-error { background: rgba(255,82,82,0.9); }
+    .toast-warning { background: rgba(255,171,0,0.9); color: #000; }
+    .toast-alert { background: linear-gradient(135deg, #ff4081, #ff6e40); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    /* Demo banner */
+    .demo-banner { background: linear-gradient(90deg, #ff4081, #7c4dff); color: #fff; text-align: center; padding: 8px 16px; font-size: 0.85em; display: none; font-weight: 500; letter-spacing: 0.3px; }
+    .demo-banner.active { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .live-indicator { display: none; padding: 4px 12px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+    .live-indicator.show { display: inline-flex; align-items: center; gap: 4px; }
+    .live-indicator.live { background: rgba(0,230,118,0.15); color: var(--up); }
+    .live-indicator.demo { background: rgba(255,64,129,0.15); color: var(--accent); }
+    /* Welcome overlay */
+    .welcome-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+    .welcome-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 500px; text-align: center; }
+    .welcome-card h2 { font-size: 1.5em; background: linear-gradient(135deg, var(--primary), var(--secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+    .welcome-card p { color: var(--text-dim); margin-bottom: 8px; font-size: 0.9em; }
+    .welcome-card .features { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; text-align: left; }
+    .welcome-card .features div { padding: 8px 12px; background: var(--bg); border-radius: 8px; font-size: 0.8em; }
+    /* Language toggle */
+    .lang-toggle { display: inline-flex; gap: 2px; background: var(--bg); border-radius: 6px; padding: 2px; margin-left: 8px; }
+    .lang-toggle button { border: none; background: none; color: var(--text-dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7em; }
+    .lang-toggle button.active { background: var(--primary); color: #000; }
   </style>
 </head>
 <body>
-  <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">&#9776;</button>
+  <div class="toast-container" id="toast-container" aria-live="polite" role="status"></div>
+  <div class="demo-banner" id="demo-banner"><span class="status-dot demo"></span>Demo Mode — showing sample data. Connect to internet for live Binance data.</div>
+  <a href="#main-content" class="sr-only" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:999;padding:8px 16px;background:var(--primary);color:#000;text-decoration:none;font-weight:600" onfocus="this.style.left='16px';this.style.top='16px';this.style.width='auto';this.style.height='auto'" onblur="this.style.left='-9999px'">Skip to main content</a>
+  <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
 
   <div class="app">
     <!-- Sidebar -->
-    <nav class="sidebar">
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
       <div class="sidebar-logo">
         <h1>AlphaMind Lite</h1>
-        <small>AI Trading Partner v9.0</small>
+        <small>AI Trading Partner v10.0</small>
+        <div class="lang-toggle">
+          <button class="active" onclick="setLang('en')">EN</button>
+          <button onclick="setLang('zh')">中文</button>
+        </div>
       </div>
-      <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
-        <span class="nav-icon">&#128202;</span> Dashboard
+      <div class="nav-item active" data-page="dashboard" role="button" tabindex="0" onclick="showPage('dashboard')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('dashboard')}">
+        <span class="nav-icon">&#128202;</span> <span class="nav-text">Dashboard</span>
       </div>
-      <div class="nav-item" data-page="market" onclick="showPage('market')">
-        <span class="nav-icon">&#128200;</span> Market Data
+      <div class="nav-item" data-page="market" role="button" tabindex="0" onclick="showPage('market')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('market')}">
+        <span class="nav-icon">&#128200;</span> <span class="nav-text">Market Data</span>
       </div>
-      <div class="nav-item" data-page="portfolio" onclick="showPage('portfolio')">
-        <span class="nav-icon">&#128188;</span> Portfolio
+      <div class="nav-item" data-page="portfolio" role="button" tabindex="0" onclick="showPage('portfolio')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('portfolio')}">
+        <span class="nav-icon">&#128188;</span> <span class="nav-text">Portfolio</span>
       </div>
-      <div class="nav-item" data-page="sentiment" onclick="showPage('sentiment')">
-        <span class="nav-icon">&#127919;</span> Sentiment
+      <div class="nav-item" data-page="sentiment" role="button" tabindex="0" onclick="showPage('sentiment')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('sentiment')}">
+        <span class="nav-icon">&#127919;</span> <span class="nav-text">Sentiment</span>
       </div>
-      <div class="nav-item" data-page="risk" onclick="showPage('risk')">
-        <span class="nav-icon">&#128737;</span> Risk Control
+      <div class="nav-item" data-page="risk" role="button" tabindex="0" onclick="showPage('risk')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('risk')}">
+        <span class="nav-icon">&#128737;</span> <span class="nav-text">Risk Control</span>
       </div>
-      <div class="nav-item" data-page="tools" onclick="showPage('tools')">
-        <span class="nav-icon">&#128295;</span> Tools
+      <div class="nav-item" data-page="tools" role="button" tabindex="0" onclick="showPage('tools')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('tools')}">
+        <span class="nav-icon">&#128295;</span> <span class="nav-text">Tools</span>
       </div>
-      <div class="nav-item" data-page="ai" onclick="showPage('ai')">
-        <span class="nav-icon">&#129302;</span> AI Chat
+      <div class="nav-item" data-page="bsc" role="button" tabindex="0" onclick="showPage('bsc')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('bsc')}">
+        <span class="nav-icon">&#9939;</span> <span class="nav-text">BSC Chain</span>
+      </div>
+      <div class="nav-item" data-page="ai" role="button" tabindex="0" onclick="showPage('ai')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('ai')}">
+        <span class="nav-icon">&#129302;</span> <span class="nav-text">AI Chat</span>
       </div>
     </nav>
 
     <!-- Main Content -->
-    <div class="main">
+    <div class="main" id="main-content">
 
       <!-- ═══ DASHBOARD PAGE ═══ -->
       <div id="page-dashboard" class="page active">
         <div class="header">
           <h2>Dashboard</h2>
           <div class="header-actions">
+            <span class="live-indicator" id="data-status-indicator"></span>
             <span class="last-update" id="dash-update"></span>
-            <button class="btn" onclick="loadDashboard()">Refresh</button>
+            <button class="btn" onclick="loadDashboard()" title="Refresh (R)">Refresh</button>
+            <button class="btn" onclick="showToast('Shortcuts: 1-8 Navigate | R Refresh | E Export', 'success', 5000)" title="Keyboard Shortcuts" style="padding:8px 10px;font-size:0.8em">?</button>
           </div>
         </div>
 
@@ -543,6 +602,28 @@
           </div>
         </div>
 
+        <!-- Technical Signal Banner -->
+        <div class="card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px" id="dash-tech-banner">
+          <div>
+            <div class="card-title" style="margin-bottom:4px">Technical Analysis (BTC 4H)</div>
+            <span id="dash-ti-summary" style="font-size:0.95em;color:var(--text-dim)">Loading indicators...</span>
+          </div>
+          <div style="display:flex;gap:16px;align-items:center">
+            <div style="text-align:center">
+              <div style="font-size:0.75em;color:var(--text-dim)">RSI</div>
+              <div id="dash-ti-rsi" style="font-size:1.3em;font-weight:700">--</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:0.75em;color:var(--text-dim)">MACD</div>
+              <div id="dash-ti-macd" style="font-size:1.3em;font-weight:700">--</div>
+            </div>
+            <div style="text-align:center;padding:8px 16px;border-radius:8px;background:var(--bg)">
+              <div style="font-size:0.75em;color:var(--text-dim)">Signal</div>
+              <div id="dash-ti-signal" style="font-size:1.3em;font-weight:700;text-transform:uppercase">--</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Market overview -->
         <div class="card" style="margin-top:16px">
           <div class="card-title">Market Overview</div>
@@ -567,7 +648,7 @@
         <div class="header">
           <h2>Market Data</h2>
           <div class="header-actions">
-            <select id="chart-symbol" class="form-input" style="width:120px" onchange="loadMarketChart()">
+            <select id="chart-symbol" class="form-input" style="width:120px" onchange="loadMarketChart()" aria-label="Select cryptocurrency">
               <option>BTC</option><option>ETH</option><option>BNB</option>
               <option>SOL</option><option>XRP</option><option>DOGE</option>
             </select>
@@ -598,6 +679,7 @@
         <div class="header">
           <h2>Portfolio Manager</h2>
           <div class="header-actions">
+            <button class="btn" onclick="exportPortfolioCSV()" title="Export CSV (E)">Export</button>
             <button class="btn-primary btn" onclick="analyzePortfolio()">Analyze</button>
           </div>
         </div>
@@ -649,7 +731,7 @@
         <div class="advice-box" id="pf-advice" style="display:none"></div>
 
         <!-- Allocation chart -->
-        <div class="card" style="margin-top:16px" id="pf-chart-card" style="display:none">
+        <div class="card" id="pf-chart-card" style="margin-top:16px;display:none">
           <div class="card-title">Portfolio Allocation</div>
           <div class="chart-wrap" style="height:300px"><canvas id="chart-portfolio"></canvas></div>
         </div>
@@ -830,6 +912,39 @@
           </div>
           <div id="calc-result"></div>
         </div>
+
+        <!-- Paper Trading Simulator -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">Paper Trading Simulator (Virtual $10,000 USDT)</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div>
+              <span style="color:var(--text-dim)">Balance: </span>
+              <span id="paper-balance" style="font-size:1.3em;font-weight:700">$10,000.00</span>
+            </div>
+            <button class="btn" onclick="resetPaperTrading()" style="font-size:0.8em">Reset to $10K</button>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Coin</label>
+              <select id="paper-symbol" class="form-input">
+                <option>BTC</option><option>ETH</option><option>BNB</option><option>SOL</option><option>XRP</option><option>DOGE</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Quantity</label>
+              <input type="number" id="paper-qty" class="form-input" placeholder="e.g. 0.01" step="any">
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
+              <button class="btn" onclick="paperTrade('buy')" style="width:50%;background:var(--up);color:#000;border-color:var(--up);font-weight:600">Buy</button>
+              <button class="btn" onclick="paperTrade('sell')" style="width:50%;background:var(--down);color:#fff;border-color:var(--down);font-weight:600">Sell</button>
+            </div>
+          </div>
+          <div id="paper-result" style="margin-top:8px"></div>
+          <div style="margin-top:12px">
+            <div class="card-title" style="font-size:0.75em">Recent Trades</div>
+            <div id="paper-trades" style="max-height:200px;overflow-y:auto;font-size:0.85em;color:var(--text-dim)">No trades yet — start trading!</div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ AI CHAT PAGE ═══ -->
@@ -855,8 +970,146 @@ Ask me anything about cryptocurrency markets, for example:
             <button class="quick-btn" onclick="sendQuick('Sell timing advice')">Sell Advice</button>
           </div>
           <div class="chat-input-bar">
-            <input type="text" id="chat-input" class="chat-input" placeholder="Ask about crypto markets..." onkeydown="if(event.key==='Enter')sendChat()">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Ask about crypto markets..." aria-label="Chat message input" onkeydown="if(event.key==='Enter')sendChat()">
             <button class="btn btn-primary" onclick="sendChat()">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ BSC CHAIN PAGE ═══ -->
+      <div id="page-bsc" class="page">
+        <div class="header">
+          <h2>BNB Smart Chain</h2>
+          <div class="header-actions">
+            <button class="btn" onclick="loadBSCData()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="grid-3" id="bsc-stats">
+          <div class="stat-card">
+            <div class="stat-label">BNB Price</div>
+            <div class="stat-value" id="bsc-bnb-price">--</div>
+            <div class="stat-change" id="bsc-bnb-change">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Gas Price (Gwei)</div>
+            <div class="stat-value" id="bsc-gas">--</div>
+            <div class="stat-change" style="color:var(--text-dim)">Low / Standard / Fast</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Market Cap</div>
+            <div class="stat-value" id="bsc-mcap">--</div>
+            <div class="stat-change" id="bsc-supply" style="color:var(--text-dim)">Total Supply: ~146M BNB</div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top:16px">
+          <div class="stat-card">
+            <div class="stat-label">BNB Staking APY</div>
+            <div class="stat-value up" id="bsc-staking-apy">--</div>
+            <div class="stat-change" style="color:var(--text-dim)">Validator staking rewards</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total BNB Burned</div>
+            <div class="stat-value" id="bsc-burned" style="color:var(--warning)">--</div>
+            <div class="stat-change" id="bsc-burn-pct" style="color:var(--text-dim)">Quarterly auto-burn</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">BSC DeFi Protocols</div>
+            <div class="stat-value" id="bsc-defi-count">1,500+</div>
+            <div class="stat-change" id="bsc-top-defi" style="color:var(--text-dim)">PancakeSwap, Venus, Alpaca...</div>
+          </div>
+        </div>
+
+        <!-- BNB Ecosystem L2 Cards -->
+        <div class="grid-3" style="margin-top:16px">
+          <div class="stat-card" style="border-left:3px solid var(--secondary)">
+            <div class="stat-label">opBNB (L2)</div>
+            <div class="stat-value" style="font-size:1.1em;color:var(--secondary)">~4,000 TPS</div>
+            <div class="stat-change" style="color:var(--text-dim)">Optimistic Rollup | Chain ID: 204</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--primary)">
+            <div class="stat-label">BNB Greenfield</div>
+            <div class="stat-value" style="font-size:1.1em;color:var(--primary)">Storage</div>
+            <div class="stat-change" style="color:var(--text-dim)">Decentralized data marketplace</div>
+          </div>
+          <div class="stat-card" style="border-left:3px solid var(--warning)">
+            <div class="stat-label">DeFi TVL</div>
+            <div class="stat-value" id="bsc-tvl" style="font-size:1.1em;color:var(--warning)">$5.2B</div>
+            <div class="stat-change" style="color:var(--text-dim)">Estimated total value locked</div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <div class="card">
+            <div class="card-title">BNB Smart Chain (BSC) Stats</div>
+            <div style="display:grid;gap:12px">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Block Time</span><span>~3 seconds</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">TPS</span><span>~100 tx/s</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Validators</span><span>21 Active + 20 Candidates</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Consensus</span><span>PoSA (Proof of Staked Authority)</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">EVM Compatible</span><span style="color:var(--up)">Yes (Solidity)</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Token Standards</span><span>BEP-20 / BEP-721 / BEP-1155</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Total Transactions</span><span id="bsc-total-tx">4.5B+</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">Unique Addresses</span><span id="bsc-unique-addr">380M+</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+                <span style="color:var(--text-dim)">BNB Auto-Burn</span><span style="color:var(--warning)">Quarterly (deflationary)</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0">
+                <span style="color:var(--text-dim)">Chain ID</span><span>56 (Mainnet) | opBNB: 204</span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">BSC Ecosystem Tokens</div>
+            <table class="market-table" id="bsc-tokens-table">
+              <thead>
+                <tr><th>Token</th><th>Price</th><th>24h</th></tr>
+              </thead>
+              <tbody id="bsc-tokens-body">
+                <tr><td colspan="3" style="text-align:center;color:var(--text-dim)">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">BTC Technical Indicators</div>
+          <div id="tech-indicators" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <div class="stat-card">
+              <div class="stat-label">RSI (14)</div>
+              <div class="stat-value" id="ti-rsi">--</div>
+              <div class="stat-change" id="ti-rsi-label">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">MACD</div>
+              <div class="stat-value" id="ti-macd">--</div>
+              <div class="stat-change" id="ti-macd-label">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Signal</div>
+              <div class="stat-value" id="ti-signal" style="text-transform:uppercase">--</div>
+              <div class="stat-change" id="ti-strength">--</div>
+            </div>
+          </div>
+          <div id="ti-bollinger" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;font-size:0.9em;color:var(--text-dim)">
+            Bollinger Bands: Loading...
           </div>
         </div>
       </div>
@@ -873,13 +1126,16 @@ Ask me anything about cryptocurrency markets, for example:
 
     // ─── API Helper ──────────────────────────────────────────────────────────
     async function api(endpoint, opts = {}) {
-      const url = endpoint.startsWith('http') ? endpoint : endpoint;
       const fetchOpts = { headers: { 'Content-Type': 'application/json' } };
       if (opts.body) {
         fetchOpts.method = 'POST';
         fetchOpts.body = JSON.stringify(opts.body);
       }
-      const res = await fetch(url, fetchOpts);
+      const res = await fetch(endpoint, fetchOpts);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `Request failed: ${res.status}`);
+      }
       return res.json();
     }
 
@@ -901,6 +1157,8 @@ Ask me anything about cryptocurrency markets, for example:
       else if (name === 'sentiment') loadSentiment();
       else if (name === 'portfolio') renderHoldings();
       else if (name === 'risk') renderAlerts();
+      else if (name === 'tools') loadPaperTrades();
+      else if (name === 'bsc') loadBSCData();
     }
 
     // ─── Dashboard ───────────────────────────────────────────────────────────
@@ -911,6 +1169,10 @@ Ask me anything about cryptocurrency markets, for example:
           api('/api/fear-greed'),
           api('/api/sentiment'),
         ]);
+
+        // Check demo mode
+        checkDemoMode(market);
+        checkDemoMode(fg);
 
         // Stats
         const btc = market.data.find(c => c.symbol === 'BTC');
@@ -941,13 +1203,32 @@ Ask me anything about cryptocurrency markets, for example:
           document.getElementById('dash-signal-text').textContent = sentiment.analysis;
         }
 
+        // Load technical indicators (non-blocking)
+        api('/api/indicators?symbol=BTC&interval=4h').then(ti => {
+          if (ti && ti.rsi != null) {
+            document.getElementById('dash-ti-rsi').textContent = ti.rsi;
+            document.getElementById('dash-ti-rsi').style.color = ti.rsi < 30 ? 'var(--up)' : ti.rsi > 70 ? 'var(--down)' : 'var(--text)';
+          }
+          if (ti && ti.macd) {
+            document.getElementById('dash-ti-macd').textContent = ti.macd.histogram > 0 ? 'Bull' : 'Bear';
+            document.getElementById('dash-ti-macd').style.color = ti.macd.histogram > 0 ? 'var(--up)' : 'var(--down)';
+          }
+          if (ti && ti.signal) {
+            const sigEl = document.getElementById('dash-ti-signal');
+            sigEl.textContent = ti.signal;
+            sigEl.style.color = ti.signal === 'buy' ? 'var(--up)' : ti.signal === 'sell' ? 'var(--down)' : 'var(--warning)';
+            const labels = { buy: 'Bullish setup — consider entries', sell: 'Bearish setup — exercise caution', hold: 'Neutral — wait for clearer signal' };
+            document.getElementById('dash-ti-summary').textContent = labels[ti.signal] || 'Calculating...';
+          }
+        }).catch(() => {});
+
         // Market table
         let html = '';
         for (const c of market.data) {
           if (c.error) continue;
           const cls = c.change24h >= 0 ? 'up' : 'down';
           html += `<tr>
-            <td><div class="coin-name"><div class="coin-icon">${c.symbol.slice(0,2)}</div>${c.symbol}</div></td>
+            <td><div class="coin-name"><div class="coin-icon">${escapeHtml(c.symbol.slice(0,2))}</div>${escapeHtml(c.symbol)}</div></td>
             <td>${fmtUSD(c.price)}</td>
             <td class="${cls}">${fmtPct(c.change24h)}</td>
             <td>${fmtUSD(c.high24h)}</td>
@@ -1026,61 +1307,151 @@ Ask me anything about cryptocurrency markets, for example:
 
     // ─── Market Page ─────────────────────────────────────────────────────────
     async function loadMarketTable() {
-      const data = await api('/api/market?symbols=BTC,ETH,BNB,SOL,XRP,DOGE,ADA,AVAX,DOT,MATIC,LINK,UNI');
-      let html = '';
-      for (const c of data.data) {
-        if (c.error) continue;
-        const cls = c.change24h >= 0 ? 'up' : 'down';
-        html += `<tr>
-          <td><div class="coin-name"><div class="coin-icon">${c.symbol.slice(0,2)}</div>${c.symbol}</div></td>
-          <td>${fmtUSD(c.price)}</td>
-          <td class="${cls}">${fmtPct(c.change24h)}</td>
-          <td>$${fmt(c.volume24h, 0)}</td>
-        </tr>`;
+      try {
+        const data = await api('/api/market?symbols=BTC,ETH,BNB,SOL,XRP,DOGE,ADA,AVAX,DOT,MATIC,LINK,UNI');
+        checkDemoMode(data);
+        let html = '';
+        for (const c of data.data) {
+          if (c.error) continue;
+          const cls = c.change24h >= 0 ? 'up' : 'down';
+          html += `<tr>
+            <td><div class="coin-name"><div class="coin-icon">${escapeHtml(c.symbol.slice(0,2))}</div>${escapeHtml(c.symbol)}</div></td>
+            <td>${fmtUSD(c.price)}</td>
+            <td class="${cls}">${fmtPct(c.change24h)}</td>
+            <td>$${fmt(c.volume24h, 0)}</td>
+          </tr>`;
+        }
+        document.getElementById('market-table-body').innerHTML = html;
+      } catch (err) {
+        showToast('Failed to load market data', 'error');
+        console.error('Market table error:', err);
       }
-      document.getElementById('market-table-body').innerHTML = html;
     }
 
     async function loadMarketChart() {
+      try {
       const sym = document.getElementById('chart-symbol').value;
-      const klines = await api(`/api/klines?symbol=${sym}&interval=${currentInterval}&limit=100`);
+      const [klines, indicators] = await Promise.all([
+        api(`/api/klines?symbol=${sym}&interval=${currentInterval}&limit=100`),
+        api(`/api/indicators?symbol=${sym}&interval=${currentInterval}`).catch(() => null),
+      ]);
+      checkDemoMode(klines);
+
+      const labels = klines.data.map(k => {
+        const d = new Date(k.time);
+        return currentInterval === '1d' ? `${d.getMonth()+1}/${d.getDate()}` : d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+      });
+
+      // Color candles green/red based on close vs open
+      const candleColors = klines.data.map(k => k.close >= k.open ? 'rgba(0,230,118,0.7)' : 'rgba(255,82,82,0.7)');
+
+      // Calculate SMA7 for overlay
+      const closes = klines.data.map(k => k.close);
+      const sma7Data = closes.map((_, i) => {
+        if (i < 6) return null;
+        const sum = closes.slice(i - 6, i + 1).reduce((a, b) => a + b, 0);
+        return sum / 7;
+      });
+
+      const datasets = [
+        {
+          label: `${sym} Close`,
+          data: closes,
+          borderColor: '#00e676',
+          backgroundColor: 'rgba(0,230,118,0.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        {
+          label: 'SMA(7)',
+          data: sma7Data,
+          borderColor: '#ffab00',
+          borderWidth: 1.5,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+        },
+        {
+          label: 'High-Low Range',
+          data: klines.data.map(k => [k.low, k.high]),
+          borderColor: candleColors,
+          backgroundColor: candleColors.map(c => c.replace('0.7', '0.15')),
+          borderWidth: 1,
+          type: 'bar',
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: `${sym} Volume`,
+          data: klines.data.map(k => k.volume),
+          borderColor: 'rgba(0,176,255,0.3)',
+          backgroundColor: 'rgba(0,176,255,0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 1,
+          yAxisID: 'y1',
+        },
+      ];
+
+      // Add Bollinger Bands if available
+      if (indicators && indicators.bollinger) {
+        const bb = indicators.bollinger;
+        // Simple: show as horizontal reference lines via annotation-like constant data
+        const bbUpper = closes.map(() => bb.upper);
+        const bbLower = closes.map(() => bb.lower);
+        datasets.push({
+          label: 'BB Upper',
+          data: bbUpper,
+          borderColor: 'rgba(255,64,129,0.3)',
+          borderWidth: 1,
+          borderDash: [3, 3],
+          pointRadius: 0,
+          fill: false,
+        });
+        datasets.push({
+          label: 'BB Lower',
+          data: bbLower,
+          borderColor: 'rgba(255,64,129,0.3)',
+          borderWidth: 1,
+          borderDash: [3, 3],
+          pointRadius: 0,
+          fill: '-1',
+          backgroundColor: 'rgba(255,64,129,0.03)',
+        });
+      }
+
       renderChart('chart-market', {
         type: 'line',
-        data: {
-          labels: klines.data.map(k => {
-            const d = new Date(k.time);
-            return currentInterval === '1d' ? `${d.getMonth()+1}/${d.getDate()}` : d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
-          }),
-          datasets: [
-            {
-              label: `${sym} Close`,
-              data: klines.data.map(k => k.close),
-              borderColor: '#00e676',
-              backgroundColor: 'rgba(0,230,118,0.08)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 0,
-              borderWidth: 2,
-            },
-            {
-              label: `${sym} Volume`,
-              data: klines.data.map(k => k.volume),
-              borderColor: 'rgba(0,176,255,0.3)',
-              backgroundColor: 'rgba(0,176,255,0.1)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 0,
-              borderWidth: 1,
-              yAxisID: 'y1',
-            },
-          ],
-        },
+        data: { labels, datasets },
         options: {
           scales: {
             y1: { position: 'right', grid: { display: false }, ticks: { color: '#8a8f98', font: { size: 10 } } },
           },
         },
       });
+
+      // Show indicators summary under chart
+      if (indicators && indicators.rsi != null) {
+        let infoHtml = `<div style="display:flex;gap:16px;margin-top:8px;font-size:0.85em;color:var(--text-dim)">`;
+        infoHtml += `<span>RSI: <strong style="color:${indicators.rsi < 30 ? 'var(--up)' : indicators.rsi > 70 ? 'var(--down)' : 'var(--text)'}">${indicators.rsi}</strong></span>`;
+        if (indicators.macd) infoHtml += `<span>MACD: <strong style="color:${indicators.macd.histogram > 0 ? 'var(--up)' : 'var(--down)'}">${indicators.macd.histogram > 0 ? 'Bullish' : 'Bearish'}</strong></span>`;
+        infoHtml += `<span>Signal: <strong style="color:${indicators.signal === 'buy' ? 'var(--up)' : indicators.signal === 'sell' ? 'var(--down)' : 'var(--warning)'">${indicators.signal.toUpperCase()}</strong></span>`;
+        if (indicators.bollinger) infoHtml += `<span>BB: ${fmtUSD(indicators.bollinger.lower)} — ${fmtUSD(indicators.bollinger.upper)}</span>`;
+        infoHtml += `</div>`;
+        const chartCard = document.getElementById('chart-market').closest('.card');
+        let infoEl = chartCard.querySelector('.chart-indicators');
+        if (!infoEl) { infoEl = document.createElement('div'); infoEl.className = 'chart-indicators'; chartCard.appendChild(infoEl); }
+        infoEl.innerHTML = infoHtml;
+      }
+
+      } catch (err) {
+        showToast('Failed to load chart data', 'error');
+        console.error('Market chart error:', err);
+      }
     }
 
     function setChartInterval(btn, interval) {
@@ -1177,7 +1548,7 @@ Ask me anything about cryptocurrency markets, for example:
       // Advice
       const advEl = document.getElementById('pf-advice');
       advEl.style.display = 'block';
-      advEl.innerHTML = `<strong>AI Advice:</strong> ${result.advice}<br><small>BTC allocation: ${fmt(result.btcRatio, 1)}% | Diversification: ${result.diversification}</small>`;
+      advEl.innerHTML = `<strong>AI Advice:</strong> ${escapeHtml(result.advice)}<br><small>BTC allocation: ${fmt(result.btcRatio, 1)}% | Diversification: ${escapeHtml(result.diversification)}</small>`;
 
       // Pie chart
       document.getElementById('pf-chart-card').style.display = 'block';
@@ -1199,11 +1570,14 @@ Ask me anything about cryptocurrency markets, for example:
 
     // ─── Sentiment ───────────────────────────────────────────────────────────
     async function loadSentiment() {
-      const [fg, sentiment, corr] = await Promise.all([
-        api('/api/fear-greed'),
-        api('/api/sentiment'),
-        api('/api/correlation'),
-      ]);
+      let fg = {}, sentiment = {}, corr = {};
+      try {
+        [fg, sentiment, corr] = await Promise.all([
+          api('/api/fear-greed').catch(() => ({})),
+          api('/api/sentiment').catch(() => ({})),
+          api('/api/correlation').catch(() => ({})),
+        ]);
+      } catch (e) { console.error('Sentiment error:', e); return; }
 
       // Fear gauge
       if (fg.value != null) {
@@ -1255,7 +1629,7 @@ Ask me anything about cryptocurrency markets, for example:
             <strong class="${sentiment.btcTrend === 'up' ? 'up' : 'down'}">${sentiment.btcTrend === 'up' ? 'Uptrend' : 'Downtrend'}</strong>
             ${sentiment.btcPrice ? `<br><small>Price: $${fmt(sentiment.btcPrice)} | Avg: $${fmt(sentiment.btcAvg)}</small>` : ''}
           </div>
-          <div class="advice-box">${sentiment.analysis}</div>
+          <div class="advice-box">${escapeHtml(sentiment.analysis || '')}</div>
         `;
       }
 
@@ -1266,7 +1640,7 @@ Ask me anything about cryptocurrency markets, for example:
           const pct = c.correlation != null ? Math.abs(c.correlation) * 100 : 0;
           const color = c.level === 'very_high' ? '#ff5252' : c.level === 'high' ? '#ff9800' : c.level === 'moderate' ? '#ffeb3b' : c.level === 'low' ? '#00e676' : '#00b0ff';
           html += `<div class="corr-item">
-            <div><strong>${c.symbol}</strong><br><small style="color:var(--text-dim)">${c.correlation != null ? c.correlation.toFixed(3) : 'N/A'}</small></div>
+            <div><strong>${escapeHtml(c.symbol)}</strong><br><small style="color:var(--text-dim)">${c.correlation != null ? c.correlation.toFixed(3) : 'N/A'}</small></div>
             <div class="corr-bar"><div class="corr-fill" style="width:${pct}%;background:${color}"></div></div>
           </div>`;
         }
@@ -1282,7 +1656,7 @@ Ask me anything about cryptocurrency markets, for example:
       const leverage = parseInt(document.getElementById('risk-leverage').value);
 
       const r = await api('/api/risk', { body: { symbol, quantity, entryPrice, leverage } });
-      if (r.error) { document.getElementById('risk-result').innerHTML = `<div class="loading">${r.error}</div>`; return; }
+      if (r.error) { document.getElementById('risk-result').innerHTML = `<div class="loading">${escapeHtml(r.error)}</div>`; return; }
 
       const riskColors = { safe: 'risk-safe', warning: 'risk-warning', danger: 'risk-danger', liquidated: 'risk-danger' };
       const riskLabels = { safe: 'Safe', warning: 'Warning', danger: 'Danger!', liquidated: 'LIQUIDATED!' };
@@ -1351,7 +1725,7 @@ Ask me anything about cryptocurrency markets, for example:
       const months = parseInt(document.getElementById('dca-months').value);
 
       const r = await api('/api/dca', { body: { symbol, monthlyAmount, months } });
-      if (r.error) { document.getElementById('dca-result').innerHTML = `<p>${r.error}</p>`; return; }
+      if (r.error) { document.getElementById('dca-result').innerHTML = `<p>${escapeHtml(r.error)}</p>`; return; }
 
       const profitCls = r.profit >= 0 ? 'up' : 'down';
       document.getElementById('dca-result').innerHTML = `
@@ -1389,27 +1763,158 @@ Ask me anything about cryptocurrency markets, for example:
       `;
     }
 
+    // ─── Paper Trading ────────────────────────────────────────────────────────
+    async function paperTrade(side) {
+      const symbol = document.getElementById('paper-symbol').value;
+      const qty = parseFloat(document.getElementById('paper-qty').value);
+      if (!qty || qty <= 0) return showToast('Enter a valid quantity', 'error');
+
+      try {
+        const r = await api('/api/paper-trade', { body: { symbol, side, quantity: qty } });
+        document.getElementById('paper-balance').textContent = fmtUSD(r.balance);
+        document.getElementById('paper-result').innerHTML = `<div style="padding:8px;border-radius:8px;background:${side === 'buy' ? 'rgba(0,230,118,0.1)' : 'rgba(255,82,82,0.1)'}">${side.toUpperCase()} ${qty} ${symbol} @ ${fmtUSD(r.trade.price)} = ${fmtUSD(r.trade.cost)}</div>`;
+        showToast(`Paper ${side}: ${qty} ${symbol}`, side === 'buy' ? 'success' : 'info');
+        loadPaperTrades();
+      } catch (err) {
+        showToast('Trade failed: ' + err.message, 'error');
+      }
+    }
+
+    async function loadPaperTrades() {
+      try {
+        const r = await api('/api/paper-trade');
+        document.getElementById('paper-balance').textContent = fmtUSD(r.balance);
+        if (r.trades.length === 0) {
+          document.getElementById('paper-trades').innerHTML = 'No trades yet — start trading!';
+          return;
+        }
+        document.getElementById('paper-trades').innerHTML = r.trades.slice(-10).reverse().map(t =>
+          `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
+            <span class="${t.side === 'buy' ? 'up' : 'down'}" style="font-weight:600">${t.side.toUpperCase()}</span>
+            <span>${t.quantity} ${escapeHtml(t.symbol)}</span>
+            <span>${fmtUSD(t.price)}</span>
+            <span style="color:var(--text-dim)">${new Date(t.createdAt).toLocaleTimeString()}</span>
+          </div>`
+        ).join('');
+      } catch {}
+    }
+
+    async function resetPaperTrading() {
+      try {
+        await api('/api/paper-trade/reset', { body: {} });
+        document.getElementById('paper-balance').textContent = '$10,000.00';
+        document.getElementById('paper-trades').innerHTML = 'No trades yet — start trading!';
+        document.getElementById('paper-result').innerHTML = '';
+        showToast('Paper trading reset to $10,000', 'success');
+      } catch (err) {
+        showToast('Reset failed', 'error');
+      }
+    }
+
+    // ─── BSC Chain Data ──────────────────────────────────────────────────────
+    async function loadBSCData() {
+      try {
+        const [bsc, indicators] = await Promise.all([
+          api('/api/bsc'),
+          api('/api/indicators?symbol=BTC&interval=4h'),
+        ]);
+
+        // BNB stats
+        if (bsc.bnb) {
+          document.getElementById('bsc-bnb-price').textContent = fmtUSD(bsc.bnb.price);
+          const changeEl = document.getElementById('bsc-bnb-change');
+          changeEl.textContent = fmtPct(bsc.bnb.change24h);
+          changeEl.className = 'stat-change ' + (bsc.bnb.change24h >= 0 ? 'up' : 'down');
+        }
+        if (bsc.gas) {
+          document.getElementById('bsc-gas').textContent = `${bsc.gas.low} / ${bsc.gas.standard} / ${bsc.gas.fast}`;
+        }
+        if (bsc.bnb && bsc.bnb.marketCap) {
+          document.getElementById('bsc-mcap').textContent = '$' + fmt(bsc.bnb.marketCap / 1e9, 1) + 'B';
+          if (bsc.bnb.circulatingSupply) document.getElementById('bsc-supply').textContent = 'Circulating: ' + fmt(bsc.bnb.circulatingSupply, 0) + ' BNB';
+        }
+        if (bsc.bnb && bsc.bnb.stakingAPY) {
+          document.getElementById('bsc-staking-apy').textContent = bsc.bnb.stakingAPY + '%';
+        }
+        if (bsc.bnb && bsc.bnb.burnedTotal) {
+          document.getElementById('bsc-burned').textContent = fmt(bsc.bnb.burnedTotal, 0) + ' BNB';
+          document.getElementById('bsc-burn-pct').textContent = bsc.bnb.burnRatePercent + '% of original supply burned';
+        }
+        if (bsc.defi) {
+          document.getElementById('bsc-defi-count').textContent = fmt(bsc.defi.totalProtocols, 0) + '+';
+          document.getElementById('bsc-top-defi').textContent = bsc.defi.topProtocols.join(', ');
+          if (bsc.defi.tvlEstimate) document.getElementById('bsc-tvl').textContent = bsc.defi.tvlEstimate;
+        }
+        if (bsc.stats) {
+          if (bsc.stats.totalTransactions) document.getElementById('bsc-total-tx').textContent = bsc.stats.totalTransactions;
+          if (bsc.stats.uniqueAddresses) document.getElementById('bsc-unique-addr').textContent = bsc.stats.uniqueAddresses;
+        }
+
+        // Ecosystem tokens
+        if (bsc.ecosystem && bsc.ecosystem.length > 0) {
+          const tbody = document.getElementById('bsc-tokens-body');
+          tbody.innerHTML = bsc.ecosystem.map(t => `<tr>
+            <td><span class="coin-name"><span class="coin-icon">${escapeHtml(t.symbol.charAt(0))}</span>${escapeHtml(t.symbol)}</span></td>
+            <td>${fmtUSD(t.price)}</td>
+            <td class="${t.change24h >= 0 ? 'up' : 'down'}">${fmtPct(t.change24h)}</td>
+          </tr>`).join('');
+        }
+
+        // Technical indicators
+        if (indicators && indicators.rsi != null) {
+          document.getElementById('ti-rsi').textContent = indicators.rsi;
+          const rsiLabel = document.getElementById('ti-rsi-label');
+          if (indicators.rsi < 30) { rsiLabel.textContent = 'Oversold'; rsiLabel.className = 'stat-change up'; }
+          else if (indicators.rsi > 70) { rsiLabel.textContent = 'Overbought'; rsiLabel.className = 'stat-change down'; }
+          else { rsiLabel.textContent = 'Neutral'; rsiLabel.className = 'stat-change'; }
+        }
+        if (indicators && indicators.macd) {
+          document.getElementById('ti-macd').textContent = indicators.macd.histogram > 0 ? 'Bullish' : 'Bearish';
+          document.getElementById('ti-macd-label').textContent = `Histogram: ${indicators.macd.histogram}`;
+          document.getElementById('ti-macd-label').className = 'stat-change ' + (indicators.macd.histogram > 0 ? 'up' : 'down');
+        }
+        if (indicators && indicators.signal) {
+          const sigEl = document.getElementById('ti-signal');
+          sigEl.textContent = indicators.signal;
+          sigEl.style.color = indicators.signal === 'buy' ? 'var(--up)' : indicators.signal === 'sell' ? 'var(--down)' : 'var(--warning)';
+          document.getElementById('ti-strength').textContent = `Strength: ${indicators.strength || 0}`;
+        }
+        if (indicators && indicators.bollinger) {
+          const bb = indicators.bollinger;
+          document.getElementById('ti-bollinger').innerHTML = `<strong>Bollinger Bands (20):</strong> Lower: ${fmtUSD(bb.lower)} | Middle: ${fmtUSD(bb.middle)} | Upper: ${fmtUSD(bb.upper)}`;
+        }
+
+        checkDemoMode(bsc);
+      } catch (err) {
+        showToast('Failed to load BSC data: ' + err.message, 'error');
+      }
+    }
+
     // ─── AI Chat ─────────────────────────────────────────────────────────────
+    let _chatSending = false;
     async function sendChat() {
+      if (_chatSending) return;
       const input = document.getElementById('chat-input');
       const msg = input.value.trim();
       if (!msg) return;
       input.value = '';
+      _chatSending = true;
 
       const messagesEl = document.getElementById('chat-messages');
-      messagesEl.innerHTML += `<div class="chat-msg user">${escapeHtml(msg)}</div>`;
-      messagesEl.innerHTML += `<div class="chat-msg ai" id="chat-loading"><div class="spinner" style="display:inline-block;width:16px;height:16px;margin-right:8px;vertical-align:middle"></div>Thinking...</div>`;
+      messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg user">${escapeHtml(msg)}</div>`);
+      messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg ai" id="chat-loading"><div class="spinner" style="display:inline-block;width:16px;height:16px;margin-right:8px;vertical-align:middle"></div>Thinking...</div>`);
       messagesEl.scrollTop = messagesEl.scrollHeight;
 
       try {
         const r = await api('/api/ai-chat', { body: { message: msg } });
-        document.getElementById('chat-loading').remove();
-        messagesEl.innerHTML += `<div class="chat-msg ai">${escapeHtml(r.reply)}</div>`;
+        document.getElementById('chat-loading')?.remove();
+        messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg ai">${escapeHtml(r.reply)}</div>`);
       } catch (e) {
-        document.getElementById('chat-loading').remove();
-        messagesEl.innerHTML += `<div class="chat-msg ai" style="border-color:var(--accent)">Sorry, an error occurred. Please try again.</div>`;
+        document.getElementById('chat-loading')?.remove();
+        messagesEl.insertAdjacentHTML('beforeend', `<div class="chat-msg ai" style="border-color:var(--accent)">Sorry, an error occurred. Please try again.</div>`);
       }
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      _chatSending = false;
     }
 
     function sendQuick(msg) {
@@ -1418,11 +1923,195 @@ Ask me anything about cryptocurrency markets, for example:
     }
 
     function escapeHtml(s) {
-      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      if (!s) return '';
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>');
+    }
+
+    // ─── Toast Notifications ─────────────────────────────────────────────────
+    function showToast(message, type = 'success', duration = 4000) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, duration);
+    }
+
+    // ─── SSE Connection + Alert Listener ──────────────────────────────────────
+    let sseSource = null;
+    function connectSSE() {
+      if (sseSource) sseSource.close();
+      sseSource = new EventSource('/api/stream');
+      sseSource.addEventListener('connected', () => { console.log('SSE connected'); });
+      sseSource.addEventListener('prices', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          // Flash animation helper
+          const flashPrice = (el, newVal, oldVal) => {
+            if (!el || oldVal === undefined) return;
+            el.textContent = fmtUSD(newVal);
+            const cls = newVal > oldVal ? 'price-flash-up' : newVal < oldVal ? 'price-flash-down' : '';
+            if (cls) { el.classList.remove('price-flash-up','price-flash-down'); void el.offsetWidth; el.classList.add(cls); }
+          };
+          // Update dashboard stat cards
+          const btc = data.find(d => d.symbol === 'BTC');
+          const eth = data.find(d => d.symbol === 'ETH');
+          if (btc) {
+            const el = document.getElementById('dash-btc-price');
+            if (el) flashPrice(el, btc.price, parseFloat(el.textContent.replace(/[$,]/g, '')));
+          }
+          if (eth) {
+            const el = document.getElementById('dash-eth-price');
+            if (el) flashPrice(el, eth.price, parseFloat(el.textContent.replace(/[$,]/g, '')));
+          }
+          // Update market table rows in real time
+          data.forEach(d => {
+            const rows = document.querySelectorAll('#market-table-body tr');
+            rows.forEach(row => {
+              const nameEl = row.querySelector('.coin-name');
+              if (nameEl && nameEl.textContent.includes(d.symbol)) {
+                const cells = row.querySelectorAll('td');
+                if (cells[1]) flashPrice(cells[1], d.price, parseFloat(cells[1].textContent.replace(/[$,]/g, '')));
+                if (cells[2]) { cells[2].textContent = fmtPct(d.change); cells[2].className = d.change >= 0 ? 'up' : 'down'; }
+              }
+            });
+          });
+        } catch {}
+      });
+      sseSource.addEventListener('alert', (e) => {
+        try {
+          const alerts = JSON.parse(e.data);
+          alerts.forEach(a => {
+            const msg = `Alert: ${a.symbol} is ${a.direction} $${fmt(a.price)} (now $${fmt(a.currentPrice)})`;
+            showToast(msg, 'alert', 10000);
+            // Browser notification
+            if (Notification.permission === 'granted') {
+              new Notification('AlphaMind Alert', { body: msg, icon: '/favicon.ico' });
+            }
+          });
+        } catch {}
+      });
+      sseSource.onerror = () => { setTimeout(connectSSE, 5000); };
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    // ─── Demo Mode Detection ──────────────────────────────────────────────────
+    let isDemoMode = false;
+    function checkDemoMode(response) {
+      const indicator = document.getElementById('data-status-indicator');
+      if (response && (response.demo || response.degraded)) {
+        if (!isDemoMode) {
+          isDemoMode = true;
+          document.getElementById('demo-banner').classList.add('active');
+        }
+        if (indicator) { indicator.className = 'live-indicator show demo'; indicator.innerHTML = '<span class="status-dot demo"></span>Demo'; }
+      } else if (response && !isDemoMode) {
+        if (indicator) { indicator.className = 'live-indicator show live'; indicator.innerHTML = '<span class="status-dot live"></span>Live'; }
+      }
+    }
+
+    // ─── Welcome Screen ───────────────────────────────────────────────────────
+    function showWelcome() {
+      if (localStorage.getItem('am_welcomed')) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'welcome-overlay';
+      overlay.innerHTML = `<div class="welcome-card">
+        <h2>Welcome to AlphaMind Lite</h2>
+        <p>Your AI-powered crypto trading assistant</p>
+        <div class="features">
+          <div>📊 Real-time Market Data</div>
+          <div>🛡️ Risk Calculator</div>
+          <div>📈 Portfolio Tracking</div>
+          <div>🤖 AI Chat Assistant</div>
+          <div>😱 Fear & Greed Index</div>
+          <div>💰 DCA Simulator</div>
+        </div>
+        <p style="color:var(--text);margin-top:12px">Start by exploring the <strong>Dashboard</strong> or add coins to your <strong>Portfolio</strong></p>
+        <button class="btn" style="margin-top:16px;padding:10px 32px;font-size:1em;cursor:pointer;background:var(--primary);color:#000;border:none;border-radius:8px;font-weight:600" onclick="this.parentElement.parentElement.remove();localStorage.setItem('am_welcomed','1')">Get Started</button>
+      </div>`;
+      document.body.appendChild(overlay);
+    }
+
+    // ─── i18n (basic) ─────────────────────────────────────────────────────────
+    const i18n = {
+      en: { dashboard: 'Dashboard', market: 'Market', portfolio: 'Portfolio', sentiment: 'Sentiment', risk: 'Risk Control', tools: 'Tools', ai: 'AI Chat' },
+      zh: { dashboard: '仪表盘', market: '行情', portfolio: '投资组合', sentiment: '市场情绪', risk: '风险控制', tools: '工具', ai: 'AI 对话' },
+    };
+    function setLang(lang) {
+      if (!i18n[lang]) return; // Validate against known languages
+      document.querySelectorAll('.lang-toggle button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.lang-toggle button').forEach(b => {
+        if (b.textContent.trim() === (lang === 'en' ? 'EN' : '中文')) b.classList.add('active');
+      });
+      const t = i18n[lang];
+      const navItems = document.querySelectorAll('.nav-item .nav-text');
+      const keys = Object.keys(t);
+      navItems.forEach((el, i) => { if (keys[i] && t[keys[i]]) el.textContent = t[keys[i]]; });
+      localStorage.setItem('am_lang', lang);
+    }
+
+    // ─── Keyboard Shortcuts ─────────────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      // Ignore when typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey) return;
+
+      const shortcuts = {
+        '1': 'dashboard', '2': 'market', '3': 'portfolio', '4': 'sentiment',
+        '5': 'risk', '6': 'tools', '7': 'ai', '8': 'bsc',
+        'r': () => { // Refresh current page
+          const active = document.querySelector('.page.active');
+          if (active) {
+            const id = active.id.replace('page-', '');
+            if (id === 'dashboard') loadDashboard();
+            else if (id === 'market') { loadMarketTable(); loadMarketChart(); }
+            else if (id === 'bsc') loadBSCData();
+            showToast('Refreshed', 'success', 1500);
+          }
+        },
+        'e': () => exportPortfolioCSV(), // Export
+      };
+
+      const action = shortcuts[e.key];
+      if (typeof action === 'string') { e.preventDefault(); showPage(action); }
+      else if (typeof action === 'function') { e.preventDefault(); action(); }
+    });
+
+    // ─── Portfolio Export ─────────────────────────────────────────────────────
+    function exportPortfolioCSV() {
+      const rows = [['Symbol', 'Amount', 'Avg Price', 'Current Value', 'PnL %']];
+      const holdings = portfolio || [];
+      if (holdings.length === 0) { showToast('No portfolio data to export', 'error'); return; }
+
+      holdings.forEach(h => {
+        rows.push([h.symbol, h.amount, h.avgPrice, '', '']);
+      });
+
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `alphamind-portfolio-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Portfolio exported as CSV', 'success');
     }
 
     // ─── Init ────────────────────────────────────────────────────────────────
+    showWelcome();
     loadDashboard();
+    connectSSE();
+
+    // Restore language
+    const savedLang = localStorage.getItem('am_lang');
+    if (savedLang && savedLang !== 'en') setLang(savedLang);
+
     // Auto-refresh every 30 seconds
     setInterval(() => {
       const activePage = document.querySelector('.page.active');
