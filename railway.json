@@ -1,13 +1,15 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "buildCommand": "echo 'Zero dependencies - no build needed'"
   },
   "deploy": {
-    "startCommand": "node scripts/server.js",
+    "startCommand": "NODE_ENV=production node scripts/server.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 10,
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3
+    "restartPolicyMaxRetries": 3,
+    "numReplicas": 1
   }
 }
