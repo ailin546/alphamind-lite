@@ -4,7 +4,7 @@
   <p align="center">
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js" alt="Node.js">
     <img src="https://img.shields.io/badge/Dependencies-0-brightgreen" alt="Zero Dependencies">
-    <img src="https://img.shields.io/badge/Tests-99%20passed-success" alt="Tests">
+    <img src="https://img.shields.io/badge/Tests-102%20passed-success" alt="Tests">
     <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
     <img src="https://img.shields.io/badge/BNB_Chain-Full_Ecosystem-F0B90B?logo=binance" alt="BNB Chain">
     <img src="https://img.shields.io/badge/opBNB-L2-orange" alt="opBNB L2">
@@ -377,7 +377,9 @@ alphamind-lite/
 │   ├── db.js              # JSON 文件数据库（原子写入）
 │   ├── logger.js          # 结构化日志系统（文件 + 轮转）
 │   ├── notify.js          # 通知系统（Telegram）
-│   ├── test.js            # 测试套件（99 测试）
+│   ├── test.js            # 测试主入口（102 测试）
+│   ├── test-modules.js    # 模块化架构测试
+│   ├── test-runner.js     # 测试运行器
 │   └── ...                # CLI 工具（demo, portfolio, arbitrage 等）
 ├── nginx/                 # Nginx 反向代理
 │   ├── nginx.conf         # 主配置（Gzip + 安全头 + 速率限制）
@@ -403,7 +405,7 @@ npm test
 # ════════════════════════════════════════
 ```
 
-99 个测试用例覆盖：配置管理、日志系统、API 客户端、技术指标、持仓管理、数据库、路由模块、中间件、工具函数、SSE、安全头、速率限制。
+102 个测试用例覆盖：配置管理、日志系统、API 客户端、技术指标、持仓管理、数据库、路由模块、中间件、工具函数、SSE、安全头、速率限制。
 
 ---
 
@@ -583,7 +585,7 @@ bash deploy.sh
 ## Tests
 
 ```bash
-npm test  # 99 tests, all passing
+npm test  # 102 tests, all passing
 ```
 
 Covers: config, logger, API client, technical indicators, portfolio, database, routes, security headers, rate limiting.
