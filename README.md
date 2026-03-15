@@ -4,7 +4,7 @@
   <p align="center">
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js" alt="Node.js">
     <img src="https://img.shields.io/badge/Dependencies-0-brightgreen" alt="Zero Dependencies">
-    <img src="https://img.shields.io/badge/Tests-62%20passed-success" alt="Tests">
+    <img src="https://img.shields.io/badge/Tests-99%20passed-success" alt="Tests">
     <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
     <img src="https://img.shields.io/badge/BNB_Chain-Full_Ecosystem-F0B90B?logo=binance" alt="BNB Chain">
     <img src="https://img.shields.io/badge/opBNB-L2-orange" alt="opBNB L2">
@@ -362,18 +362,23 @@ alphamind-lite/
 ├── config/
 │   └── config.js          # 集中配置管理（环境变量覆盖）
 ├── scripts/
-│   ├── server.js          # 生产级 HTTP 服务器（55KB，全功能）
+│   ├── server.js          # HTTP 服务器入口 + 路由 + 优雅关闭（172行）
+│   ├── middleware.js       # 缓存、限流、安全头、响应助手
+│   ├── utils.js           # 共享工具（escapeHtml, 格式化, 验证）
+│   ├── demo-data.js       # 降级/演示数据
+│   ├── routes-health.js   # 健康检查、就绪探针、Prometheus 指标
+│   ├── routes-market.js   # 行情、情绪、相关性、K线、指标
+│   ├── routes-portfolio.js# 持仓 CRUD、提醒、资金费率
+│   ├── routes-trading.js  # 风险计算、DCA模拟、模拟交易
+│   ├── routes-ai-chat.js  # AI 智能分析引擎
+│   ├── routes-bsc.js      # BSC 生态数据
+│   ├── sse.js             # SSE 实时推送 + 提醒触发
 │   ├── api-client.js      # 统一 API 客户端（超时/重试/指数退避）
 │   ├── db.js              # JSON 文件数据库（原子写入）
-│   ├── logger.js          # 结构化日志系统
+│   ├── logger.js          # 结构化日志系统（文件 + 轮转）
 │   ├── notify.js          # 通知系统（Telegram）
-│   ├── test.js            # 测试套件（62 测试）
-│   ├── demo.js            # 快速演示
-│   ├── portfolio.js       # 持仓管理
-│   ├── arbitrage.js       # 套利扫描
-│   ├── whale-alert.js     # 巨鲸追踪
-│   ├── ai-chat.js         # AI 对话
-│   └── ...                # 更多 CLI 工具（共 19 个）
+│   ├── test.js            # 测试套件（99 测试）
+│   └── ...                # CLI 工具（demo, portfolio, arbitrage 等）
 ├── nginx/                 # Nginx 反向代理
 │   ├── nginx.conf         # 主配置（Gzip + 安全头 + 速率限制）
 │   └── conf.d/default.conf
@@ -398,7 +403,7 @@ npm test
 # ════════════════════════════════════════
 ```
 
-62 个测试用例覆盖：配置管理、日志系统、API 客户端、技术指标、持仓管理、数据库、路由、安全头、速率限制。
+99 个测试用例覆盖：配置管理、日志系统、API 客户端、技术指标、持仓管理、数据库、路由模块、中间件、工具函数、SSE、安全头、速率限制。
 
 ---
 
@@ -578,7 +583,7 @@ bash deploy.sh
 ## Tests
 
 ```bash
-npm test  # 62 tests, all passing
+npm test  # 99 tests, all passing
 ```
 
 Covers: config, logger, API client, technical indicators, portfolio, database, routes, security headers, rate limiting.
