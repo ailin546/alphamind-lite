@@ -138,7 +138,9 @@ async function fetchKlines(symbol = 'BTCUSDT', interval = '1h', limit = 24) {
  * Uses Binance's BSC RPC-compatible endpoint
  */
 async function fetchBSCGasPrice() {
-  const url = 'https://api.bscscan.com/api?module=gastracker&action=gasoracle&apikey=YourApiKeyToken';
+  const apiKey = (config.apis && config.apis.bscscan && config.apis.bscscan.apiKey) || 'YourApiKeyToken';
+  const baseUrl = (config.apis && config.apis.bscscan && config.apis.bscscan.url) || 'https://api.bscscan.com/api';
+  const url = baseUrl + '?module=gastracker&action=gasoracle&apikey=' + apiKey;
   try {
     const data = await httpGet(url, { timeout: 8000, retries: 2 });
     if (data.status === '1' && data.result) {

@@ -17,6 +17,7 @@ const { handlePortfolio, handlePortfolioAdd, handlePortfolioRemove, handleAlerts
 const { handleRisk, handleDCA, handlePaperTrade, handlePaperTradeHistory, handlePaperTradeReset, handleLatestPrices, setLastPrices } = require('./routes-trading');
 const { handleAIChat } = require('./routes-ai-chat');
 const { handleBSCData } = require('./routes-bsc');
+const { handleWhaleAlert, handleArbitrage, handleFundingRate } = require('./routes-whale-arb');
 const { handleSSE, heartbeatTimer, broadcastTimer, drainClients, onPricesUpdate } = require('./sse');
 
 createLogger({ context: 'server' });
@@ -49,6 +50,9 @@ const routes = {
   'GET /api/paper-trade': handlePaperTradeHistory,
   'POST /api/paper-trade/reset': handlePaperTradeReset,
   'GET /api/bsc': handleBSCData,
+  'GET /api/whale': handleWhaleAlert,
+  'GET /api/arbitrage': handleArbitrage,
+  'GET /api/funding-rate': handleFundingRate,
   'GET /api/indicators': handleIndicators,
   'GET /api/multi-timeframe': handleMultiTimeframe,
   'GET /api/prices': handleLatestPrices,
@@ -77,7 +81,9 @@ const server = http.createServer(async (req, res) => {
 
   // CORS headers
   const corsOrigin = process.env.CORS_ORIGIN;
-  const allowedOrigin = corsOrigin || (req.headers.origin && req.headers.host && req.headers.origin.includes(req.headers.host) ? req.headers.origin : 'null');
+  const origin = req.headers.origin;
+  const host = req.headers.host;
+  const allowedOrigin = corsOrigin || (origin && host && (origin === 'http://' + host || origin === 'https://' + host) ? origin : 'null');
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
