@@ -81,7 +81,9 @@ const server = http.createServer(async (req, res) => {
 
   // CORS headers
   const corsOrigin = process.env.CORS_ORIGIN;
-  const allowedOrigin = corsOrigin || (req.headers.origin && req.headers.host && req.headers.origin.includes(req.headers.host) ? req.headers.origin : 'null');
+  const origin = req.headers.origin;
+  const host = req.headers.host;
+  const allowedOrigin = corsOrigin || (origin && host && (origin === 'http://' + host || origin === 'https://' + host) ? origin : 'null');
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

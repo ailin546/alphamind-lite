@@ -8,6 +8,7 @@
 const { getLogger } = require('./logger');
 const { fetchMultiplePrices, fetchFundingRates } = require('./api-client');
 const { sendJSON, readBody, metrics } = require('./middleware');
+const { isValidSymbol } = require('./utils');
 const db = require('./db');
 
 const log = getLogger('portfolio');
@@ -70,7 +71,7 @@ async function handlePortfolio(req, res) {
 async function handlePortfolioAdd(req, res) {
   try {
     const { symbol, amount, avgPrice } = await readBody(req);
-    if (!symbol || typeof symbol !== 'string') return sendJSON(res, 400, { error: 'symbol required' });
+    if (!symbol || typeof symbol !== 'string' || !isValidSymbol(symbol)) return sendJSON(res, 400, { error: 'Invalid symbol' });
     const amt = parseFloat(amount);
     const price = parseFloat(avgPrice);
     if (isNaN(amt) || amt <= 0) return sendJSON(res, 400, { error: 'Invalid amount' });
@@ -85,7 +86,7 @@ async function handlePortfolioAdd(req, res) {
 async function handlePortfolioRemove(req, res) {
   try {
     const { symbol } = await readBody(req);
-    if (!symbol) return sendJSON(res, 400, { error: 'symbol required' });
+    if (!symbol || !isValidSymbol(symbol)) return sendJSON(res, 400, { error: 'Invalid symbol' });
     const result = db.removeHolding(symbol.toUpperCase());
     if (!result) return sendJSON(res, 404, { error: `${symbol.toUpperCase()} not found` });
     sendJSON(res, 200, { ok: true, message: `Removed ${symbol.toUpperCase()}` });
@@ -102,7 +103,7 @@ function handleAlerts(req, res) {
 async function handleAlertAdd(req, res) {
   try {
     const { symbol, price, direction } = await readBody(req);
-    if (!symbol || typeof symbol !== 'string') return sendJSON(res, 400, { error: 'symbol required' });
+    if (!symbol || typeof symbol !== 'string' || !isValidSymbol(symbol)) return sendJSON(res, 400, { error: 'Invalid symbol' });
     const p = parseFloat(price);
     if (isNaN(p) || p <= 0) return sendJSON(res, 400, { error: 'Invalid price' });
     if (!['above', 'below'].includes(direction)) return sendJSON(res, 400, { error: 'direction must be above or below' });
