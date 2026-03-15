@@ -849,7 +849,7 @@ var sseSource = null;
 function connectSSE() {
   if (sseSource) sseSource.close();
   sseSource = new EventSource('/api/stream');
-  sseSource.addEventListener('connected', function() { console.log('SSE connected'); });
+  sseSource.addEventListener('connected', function() { /* connected */ });
   sseSource.addEventListener('prices', function(e) {
     try {
       var data = JSON.parse(e.data);
