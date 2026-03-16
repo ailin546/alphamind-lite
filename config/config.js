@@ -69,6 +69,14 @@ const config = {
       url: 'https://api.tavily.com/search',
       apiKey: process.env.TAVILY_API_KEY || '',
     },
+    // Free LLM for AI chat (pick one)
+    llm: {
+      provider: process.env.LLM_PROVIDER || '', // 'gemini', 'groq', 'deepseek', or '' for rule-based
+      geminiKey: process.env.GEMINI_API_KEY || '',
+      groqKey: process.env.GROQ_API_KEY || '',
+      deepseekKey: process.env.DEEPSEEK_API_KEY || '',
+      timeout: parseInt(process.env.LLM_TIMEOUT || '15000', 10),
+    },
   },
 
   // 日志配置

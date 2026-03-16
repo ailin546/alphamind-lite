@@ -999,17 +999,30 @@ async function loadWhaleData() {
     var tbody = document.getElementById('whale-trades-body');
     if (tbody) {
       if (data.largeTrades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
       } else {
         tbody.innerHTML = data.largeTrades.map(function(tr) {
+          var tierClass = tr.usd >= 500000 ? 'whale' : tr.usd >= 200000 ? 'shark' : 'dolphin';
           return '<tr>' +
             '<td>' + (tr.time ? new Date(tr.time).toLocaleTimeString() : '--') + '</td>' +
+            '<td style="font-weight:600">' + escapeHtml(tr.symbol || 'BTC') + '</td>' +
             '<td><span class="side-badge ' + tr.side + '">' + tr.side.toUpperCase() + '</span></td>' +
             '<td>' + fmtUSD(tr.price) + '</td>' +
-            '<td>' + fmt(tr.qty, 4) + '</td>' +
-            '<td style="font-weight:600">' + fmtUSD(tr.usd) + '</td>' +
+            '<td>' + fmt(tr.qty, 4) + (tr.fills > 1 ? ' <small style="color:var(--text-dim)">(' + tr.fills + ' fills)</small>' : '') + '</td>' +
+            '<td style="font-weight:600"><span class="whale-badge ' + tierClass + '">' + fmtUSD(tr.usd) + '</span></td>' +
             '</tr>';
         }).join('');
+      }
+    }
+
+    // Update trade count with tier info
+    el = document.getElementById('whale-trade-count');
+    if (el) {
+      el.textContent = data.summary.tradeCount;
+      if (data.summary.tier500k > 0) {
+        el.insertAdjacentHTML('afterend', '<div class="stat-change" style="color:var(--text-dim);font-size:0.7em">' +
+          (data.summary.tier500k > 0 ? '>$500K: ' + data.summary.tier500k : '') +
+          (data.summary.tier100k > 0 ? ' | >$100K: ' + data.summary.tier100k : '') + '</div>');
       }
     }
 
@@ -1059,6 +1072,26 @@ async function loadArbitrageData() {
     el = document.getElementById('arb-volatility-count');
     if (el) el.textContent = data.opportunities.highVolatility.length;
 
+    // Market summary banner
+    if (data.marketSummary) {
+      var ms = data.marketSummary;
+      var summaryHtml = '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;font-size:0.85em">';
+      summaryHtml += '<span style="color:var(--text-dim)">' + t('arb.totalCoins') + ': <strong style="color:var(--text)">' + ms.coinsScanned + '</strong></span>';
+      summaryHtml += '<span style="color:var(--text-dim)">' + t('arb.basisOpps') + ': <strong class="up">' + ms.basisOppsCount + '</strong></span>';
+      summaryHtml += '<span style="color:var(--text-dim)">' + t('arb.fundingRate') + ': <strong>' + fmt(ms.avgFundingRate, 4) + '%</strong></span>';
+      if (ms.bestOpportunity) {
+        summaryHtml += '<span style="color:var(--primary);font-weight:600">' +
+          (currentLang === 'zh' ? '最佳机会' : 'Best') + ': ' + ms.bestOpportunity.symbol +
+          ' (' + ms.bestOpportunity.grade + ' ' + (currentLang === 'zh' ? '评级' : 'grade') + ')</span>';
+      }
+      summaryHtml += '</div>';
+      var statsEl = document.getElementById('arb-basis-opps');
+      if (statsEl) statsEl.insertAdjacentHTML('beforebegin', '<div id="arb-market-summary">' + summaryHtml + '</div>');
+      // Remove old summary if re-rendering
+      var oldSummary = document.querySelectorAll('#arb-market-summary');
+      if (oldSummary.length > 1) oldSummary[0].remove();
+    }
+
     // Basis opportunities
     var basisEl = document.getElementById('arb-basis-opps');
     if (basisEl) {
@@ -1066,10 +1099,20 @@ async function loadArbitrageData() {
         basisEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noOpps') + '</p>';
       } else {
         basisEl.innerHTML = data.opportunities.basis.map(function(o) {
+          var gradeColor = o.grade === 'A' ? 'var(--up)' : o.grade === 'B' ? 'var(--secondary)' : 'var(--warning)';
           return '<div class="opp-card">' +
-            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
-            '<span class="whale-badge ' + (o.direction === 'premium' ? 'whale' : 'dolphin') + '">' + o.direction + '</span>' +
-            '<div class="opp-detail">' + t('arb.basis') + ': ' + fmtPct(o.basis) + ' | ' + t('arb.strategy') + ': ' + o.strategy.replace(/_/g, ' ') + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<div>' +
+                '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
+                '<span class="whale-badge ' + (o.direction === 'premium' ? 'whale' : 'dolphin') + '">' + o.direction + '</span> ' +
+                '<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:' + gradeColor + ';color:#000;font-weight:700;font-size:0.8em">' + o.grade + '</span>' +
+              '</div>' +
+              '<span style="color:var(--primary);font-weight:600">' + (currentLang === 'zh' ? '年化' : 'APY') + ': ' + o.annualizedReturn + '%</span>' +
+            '</div>' +
+            '<div class="opp-detail" style="margin-top:6px">' +
+              t('arb.basis') + ': ' + fmtPct(o.basis) + ' | ' +
+              (currentLang === 'zh' ? '策略' : 'Strategy') + ': ' + o.strategy.replace(/_/g, ' ') +
+            '</div>' +
             '</div>';
         }).join('');
       }
@@ -1083,25 +1126,34 @@ async function loadArbitrageData() {
       } else {
         volEl.innerHTML = data.opportunities.highVolatility.map(function(o) {
           return '<div class="opp-card">' +
-            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span>' +
-            '<div class="opp-detail">' + t('arb.dayRange') + ': ' + fmt(o.dayRange, 2) + '% | ' + t('arb.change24h') + ': ' + fmtPct(o.change24h) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span>' +
+              '<span style="color:var(--warning);font-weight:600">' + fmt(o.dayRange, 2) + '% ' + (currentLang === 'zh' ? '波幅' : 'range') + '</span>' +
+            '</div>' +
+            '<div class="opp-detail" style="margin-top:4px">' +
+              t('arb.change24h') + ': <span class="' + (o.change24h >= 0 ? 'up' : 'down') + '">' + fmtPct(o.change24h) + '</span>' +
+              (o.high24h ? ' | H: ' + fmtUSD(o.high24h) + ' L: ' + fmtUSD(o.low24h) : '') +
+              (o.volume ? ' | Vol: ' + (o.volume > 1e9 ? '$' + (o.volume / 1e9).toFixed(1) + 'B' : fmtUSD(o.volume)) : '') +
+            '</div>' +
             '</div>';
         }).join('');
       }
     }
 
-    // Coins table
+    // Coins table with grade column
     var coinsBody = document.getElementById('arb-coins-body');
     if (coinsBody) {
       coinsBody.innerHTML = data.coins.map(function(c) {
-        var basisClass = Math.abs(c.basis) > 0.1 ? (c.basis > 0 ? 'up' : 'down') : '';
+        var basisClass = Math.abs(c.basis) > 0.05 ? (c.basis > 0 ? 'up' : 'down') : '';
+        var gradeColor = c.riskReward && c.riskReward.grade === 'A' ? 'var(--up)' : c.riskReward && c.riskReward.grade === 'B' ? 'var(--secondary)' : 'var(--text-dim)';
         return '<tr>' +
-          '<td style="font-weight:600">' + escapeHtml(c.symbol) + '</td>' +
+          '<td style="font-weight:600">' + escapeHtml(c.symbol) +
+            (c.riskReward ? ' <span style="color:' + gradeColor + ';font-size:0.8em">' + c.riskReward.grade + '</span>' : '') + '</td>' +
           '<td>' + fmtUSD(c.spotPrice) + '</td>' +
           '<td>' + fmtUSD(c.futuresPrice) + '</td>' +
           '<td class="' + basisClass + '">' + fmtPct(c.basis) + '</td>' +
           '<td>' + fmt(c.fundingRate, 4) + '%</td>' +
-          '<td class="' + (c.fundingAPY > 20 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
+          '<td class="' + (Math.abs(c.fundingAPY) > 15 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
           '<td>' + fmt(c.dayRange, 2) + '%</td>' +
           '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
           '</tr>';
@@ -1234,7 +1286,7 @@ var i18n = {
     'whale.volume24h': '24h Volume', 'whale.largeTrades': 'Binance Large Trades (>$500K)',
     'whale.loading': 'Loading whale data...', 'whale.loadingOnchain': 'Loading on-chain data...',
     'whale.blockHeight': 'Block Height', 'whale.blockHash': 'Block Hash',
-    'whale.th.time': 'Time', 'whale.th.side': 'Side', 'whale.th.price': 'Price',
+    'whale.th.time': 'Time', 'whale.th.symbol': 'Symbol', 'whale.th.side': 'Side', 'whale.th.price': 'Price',
     'whale.th.quantity': 'Quantity', 'whale.th.usdValue': 'USD Value',
     'whale.th.hash': 'TX Hash', 'whale.th.btcAmount': 'BTC Amount', 'whale.th.size': 'Size',
     // Arb HTML labels
@@ -1347,7 +1399,7 @@ var i18n = {
     'whale.volume24h': '24h 成交量', 'whale.largeTrades': '币安大额交易 (>$50万)',
     'whale.loading': '加载巨鲸数据...', 'whale.loadingOnchain': '加载链上数据...',
     'whale.blockHeight': '区块高度', 'whale.blockHash': '区块哈希',
-    'whale.th.time': '时间', 'whale.th.side': '方向', 'whale.th.price': '价格',
+    'whale.th.time': '时间', 'whale.th.symbol': '币种', 'whale.th.side': '方向', 'whale.th.price': '价格',
     'whale.th.quantity': '数量', 'whale.th.usdValue': 'USD价值',
     'whale.th.hash': '交易哈希', 'whale.th.btcAmount': 'BTC数量', 'whale.th.size': '规模',
     // Arb HTML labels

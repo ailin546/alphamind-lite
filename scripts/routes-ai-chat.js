@@ -5,15 +5,166 @@
  * Zero dependencies - pure Node.js
  */
 
+const https = require('https');
 const { fetchMarketData, fetchFearGreedIndex, fetchKlines, calculateIndicators } = require('./api-client');
 const { sendJSON, readBody } = require('./middleware');
 const { fmtPrice, fmtPct } = require('./utils');
 const DEMO_DATA = require('./demo-data');
 const db = require('./db');
 
+let config;
+try {
+  config = require('../config/config');
+} catch {
+  config = { apis: { llm: { provider: '', timeout: 15000 } } };
+}
+
 // Conversation memory per session (cleared on restart)
 const chatSessions = new Map();
 const MAX_CHAT_SESSIONS = 1000;
+
+/**
+ * Build a system prompt with all live market data context
+ */
+function buildSystemPrompt(ctx, portfolio, zh) {
+  const b = ctx.btc;
+  const ind = ctx.indicators;
+  const fg = ctx.fg;
+
+  let prompt = zh
+    ? `你是 AlphaMind AI 加密货币分析助手。请用中文回答，基于以下实时市场数据提供专业分析。\n\n`
+    : `You are AlphaMind AI, a crypto analysis assistant. Provide professional analysis based on the following live market data.\n\n`;
+
+  prompt += `=== Live Market Data ===\n`;
+  prompt += `BTC: $${b.price} (24h: ${b.change > 0 ? '+' : ''}${b.change.toFixed(2)}%, High: $${b.high}, Low: $${b.low})\n`;
+  prompt += `ETH: $${ctx.eth.price} (24h: ${ctx.eth.change > 0 ? '+' : ''}${ctx.eth.change.toFixed(2)}%)\n`;
+  prompt += `BNB: $${ctx.bnb.price} (24h: ${ctx.bnb.change > 0 ? '+' : ''}${ctx.bnb.change.toFixed(2)}%)\n`;
+  prompt += `SOL: $${ctx.sol.price} (24h: ${ctx.sol.change > 0 ? '+' : ''}${ctx.sol.change.toFixed(2)}%)\n`;
+
+  if (fg) {
+    prompt += `Fear & Greed Index: ${fg.value}/100 (${fg.label})\n`;
+  }
+
+  if (ind) {
+    prompt += `\n=== BTC Technical Indicators (4H) ===\n`;
+    prompt += `RSI(14): ${ind.rsi || 'N/A'}\n`;
+    prompt += `Signal: ${(ind.signal || 'hold').toUpperCase()} (Strength: ${ind.strength || 'N/A'})\n`;
+    if (ind.macd) prompt += `MACD Histogram: ${ind.macd.histogram}\n`;
+    if (ind.bollinger) prompt += `Bollinger Bands: $${ind.bollinger.lower} - $${ind.bollinger.upper} (Mid: $${ind.bollinger.middle})\n`;
+    if (ind.sma) prompt += `SMA7: ${ind.sma.sma7 || 'N/A'}, SMA25: ${ind.sma.sma25 || 'N/A'}\n`;
+    if (ind.volume) prompt += `Volume Trend: ${ind.volume.trend || 'normal'}\n`;
+  }
+
+  if (portfolio && portfolio.length > 0) {
+    prompt += `\n=== User Portfolio ===\n`;
+    portfolio.forEach(h => {
+      const livePrice = ctx[h.symbol.toLowerCase()]?.price;
+      if (livePrice) {
+        const pnl = ((livePrice - h.avgPrice) / h.avgPrice * 100).toFixed(1);
+        prompt += `${h.symbol}: ${h.amount} units @ $${h.avgPrice} (current: $${livePrice}, PnL: ${pnl}%)\n`;
+      }
+    });
+  }
+
+  prompt += zh
+    ? `\n请根据以上数据回答用户问题。提供具体数字和分析，给出可操作的建议。使用emoji增强可读性。保持简洁但全面。`
+    : `\nAnswer the user's question using the data above. Include specific numbers and analysis. Give actionable advice. Use emoji for readability. Be concise but comprehensive.`;
+
+  return prompt;
+}
+
+/**
+ * Make an HTTPS POST request to an LLM API
+ */
+function llmPost(url, headers, body, timeout) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const postData = JSON.stringify(body);
+    const opts = {
+      hostname: parsed.hostname,
+      port: parsed.port || 443,
+      path: parsed.pathname + parsed.search,
+      method: 'POST',
+      timeout,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        ...headers,
+      },
+    };
+
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try { resolve(JSON.parse(data)); }
+          catch { reject(new Error('Invalid JSON from LLM API')); }
+        } else {
+          reject(new Error(`LLM API error ${res.statusCode}: ${data.slice(0, 200)}`));
+        }
+      });
+    });
+
+    req.on('timeout', () => { req.destroy(); reject(new Error('LLM API timeout')); });
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * Call a free LLM API (Gemini, Groq, or DeepSeek) with market context
+ */
+async function callLLM(userMessage, systemPrompt) {
+  const llmCfg = config.apis?.llm || {};
+  const provider = llmCfg.provider;
+  const timeout = llmCfg.timeout || 15000;
+
+  if (!provider) return null;
+
+  if (provider === 'gemini' && llmCfg.geminiKey) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${llmCfg.geminiKey}`;
+    const body = {
+      contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: ${userMessage}` }] }],
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+    };
+    const resp = await llmPost(url, {}, body, timeout);
+    return resp?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }
+
+  if (provider === 'groq' && llmCfg.groqKey) {
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
+    const body = {
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 1024,
+      temperature: 0.7,
+    };
+    const resp = await llmPost(url, { Authorization: `Bearer ${llmCfg.groqKey}` }, body, timeout);
+    return resp?.choices?.[0]?.message?.content || null;
+  }
+
+  if (provider === 'deepseek' && llmCfg.deepseekKey) {
+    const url = 'https://api.deepseek.com/chat/completions';
+    const body = {
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 1024,
+      temperature: 0.7,
+    };
+    const resp = await llmPost(url, { Authorization: `Bearer ${llmCfg.deepseekKey}` }, body, timeout);
+    return resp?.choices?.[0]?.message?.content || null;
+  }
+
+  return null;
+}
 
 async function handleAIChat(req, res) {
   try {
@@ -61,7 +212,34 @@ async function handleAIChat(req, res) {
     }
 
     const portfolio = db.getPortfolio();
-    const reply = generateAnalysis(msg, ctx, portfolio, session.history);
+    const zh = detectChinese(message);
+
+    // Try LLM first, fallback to rule-based analysis
+    let reply;
+    try {
+      const systemPrompt = buildSystemPrompt(ctx, portfolio, zh);
+      const llmReply = await callLLM(message, systemPrompt);
+      if (llmReply) {
+        // Prepend market snapshot header to LLM response
+        const ind = ctx.indicators;
+        const b = ctx.btc;
+        const fg = ctx.fg;
+        let headerExtra = '';
+        if (ind) {
+          headerExtra = ` | RSI: ${ind.rsi || 'N/A'} | ${zh ? '信号' : 'Signal'}: ${(ind.signal || 'hold').toUpperCase()}`;
+        }
+        const header = zh
+          ? `📊 **市场快照** | BTC ${fmtPrice(b.price)} (${fmtPct(b.change)}) | ETH ${fmtPrice(ctx.eth.price)} (${fmtPct(ctx.eth.change)}) | 恐慌贪婪指数: ${fg ? `${fg.value}/100 (${fg.label})` : '暂无'}${headerExtra}\n\n`
+          : `📊 **Market Snapshot** | BTC ${fmtPrice(b.price)} (${fmtPct(b.change)}) | ETH ${fmtPrice(ctx.eth.price)} (${fmtPct(ctx.eth.change)}) | Fear & Greed: ${fg ? `${fg.value}/100 (${fg.label})` : 'N/A'}${headerExtra}\n\n`;
+        reply = header + llmReply;
+      }
+    } catch {
+      // LLM failed, fall through to rule-based
+    }
+
+    if (!reply) {
+      reply = generateAnalysis(msg, ctx, portfolio, session.history);
+    }
     session.history.push({ role: 'assistant', content: reply, time: Date.now() });
 
     sendJSON(res, 200, { ok: true, reply, context: {
