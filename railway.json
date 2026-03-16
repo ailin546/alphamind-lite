@@ -5,7 +5,7 @@
     "buildCommand": "echo 'Zero dependencies - no build needed'"
   },
   "deploy": {
-    "startCommand": "NODE_ENV=production node scripts/server.js",
+    "startCommand": "node scripts/server.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 10,
     "restartPolicyType": "ON_FAILURE",
