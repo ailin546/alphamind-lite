@@ -292,11 +292,46 @@ async function handleWhaleAlert(req, res) {
     if (buyVol > sellVol * 1.2 && btcDepth.imbalance > 1.1) accDist = 'accumulation';
     else if (sellVol > buyVol * 1.2 && btcDepth.imbalance < 0.9) accDist = 'distribution';
 
+    // Cross-module correlation signals (whale x arb)
+    var signals = [];
+    var arbCache = getCached('arbitrage');
+    if (arbCache && arbCache.coins) {
+      var btcArb = arbCache.coins.find(function(c) { return c.symbol === 'BTC'; });
+      if (btcArb) {
+        // Signal: whales accumulating while basis is negative = potential reversal
+        if (accDist === 'accumulation' && btcArb.basis < -0.03) {
+          signals.push({ type: 'whale_basis_divergence', confidence: 'high', direction: 'bullish',
+            detail: 'Whales accumulating while futures trade at discount — potential reversal setup' });
+        }
+        // Signal: whales distributing while basis is positive = potential top
+        if (accDist === 'distribution' && btcArb.basis > 0.05) {
+          signals.push({ type: 'whale_basis_convergence', confidence: 'high', direction: 'bearish',
+            detail: 'Whales distributing while futures trade at premium — potential top signal' });
+        }
+        // Signal: massive long liquidations + high positive funding = cascade risk
+        if (longLiqVol > shortLiqVol * 3 && btcArb.fundingRate > 0.005) {
+          signals.push({ type: 'liquidation_cascade_risk', confidence: 'medium', direction: 'bearish',
+            detail: 'Heavy long liquidations with elevated funding — further downside possible' });
+        }
+        // Signal: short squeeze + negative funding = bullish
+        if (shortLiqVol > longLiqVol * 3 && btcArb.fundingRate < -0.005) {
+          signals.push({ type: 'short_squeeze', confidence: 'medium', direction: 'bullish',
+            detail: 'Shorts being squeezed with negative funding — momentum may continue up' });
+        }
+        // Signal: order book flip with arb opportunity
+        if (btcDepth.imbalanceSignal && btcDepth.imbalanceSignal.indexOf('buy') >= 0 && btcArb.feeAnalysis && btcArb.feeAnalysis.profitable) {
+          signals.push({ type: 'buy_support_with_arb', confidence: 'medium', direction: 'opportunity',
+            detail: 'Strong buy-side support + profitable arb opportunity on BTC' });
+        }
+      }
+    }
+
     var data = {
       btcPrice: btcPrice,
       btcChange: market ? parseFloat(market.priceChangePercent) : 0,
       volume24h: market ? parseFloat(market.quoteVolume) : 0,
       largeTrades: largeTrades.slice(0, 30),
+      smartSignals: signals,
       onchain: onchain,
       liquidations: {
         recent: allLiqs.slice(0, 20),
@@ -447,6 +482,74 @@ function calculateFeeAdjustedPnL(basis, fundingRate, positionSize) {
     netROI: parseFloat(netROI.toFixed(4)),
     profitable: netProfit > 0,
     breakEvenBasis: parseFloat(((totalFees / positionSize) * 100).toFixed(4)),
+  };
+}
+
+/**
+ * Calculate position sizing advice and hedging details
+ * Uses a conservative fixed-fractional approach with grade-based scaling
+ */
+function calculatePositionAdvice(coin, accountSize) {
+  accountSize = accountSize || 100000;
+  var grade = coin.riskReward ? coin.riskReward.grade : 'C';
+  var basis = Math.abs(coin.basis || 0);
+  var fundingRate = Math.abs(coin.fundingRate || 0);
+
+  // Grade-based position fraction (conservative)
+  var fractionMap = { A: 0.15, B: 0.10, C: 0.06, D: 0.03 };
+  var fraction = fractionMap[grade] || 0.05;
+
+  var positionSize = Math.round(accountSize * fraction);
+  var spotSize = positionSize;
+  var futuresSize = positionSize;
+
+  // Hedging details
+  var spotQty = coin.spotPrice > 0 ? parseFloat((spotSize / coin.spotPrice).toFixed(6)) : 0;
+  var futuresQty = coin.futuresPrice > 0 ? parseFloat((futuresSize / coin.futuresPrice).toFixed(6)) : 0;
+
+  // Expected returns
+  var dailyBasisReturn = basis / 100;
+  var dailyFundingReturn = fundingRate / 100 * 3; // 3 funding cycles per day
+  var dailyReturn = (dailyBasisReturn + dailyFundingReturn) * positionSize;
+  var monthlyReturn = dailyReturn * 30;
+
+  // Risk: max drawdown if basis widens by 2x
+  var maxDrawdown = parseFloat((basis * 2 * positionSize / 100).toFixed(2));
+
+  // Leverage needed for futures side
+  var recLeverage = coin.dayRange > 8 ? 2 : coin.dayRange > 5 ? 3 : 5;
+
+  // Initial margin for futures at recommended leverage
+  var initialMargin = parseFloat((futuresSize / recLeverage).toFixed(2));
+
+  // Liquidation price estimate (for short futures)
+  var liqDistance = coin.futuresPrice > 0 ? (1 / recLeverage) : 0;
+  var liqPrice = coin.basis > 0
+    ? parseFloat((coin.futuresPrice * (1 + liqDistance)).toFixed(2))
+    : parseFloat((coin.futuresPrice * (1 - liqDistance)).toFixed(2));
+
+  var riskLevel = coin.dayRange > 8 ? 'HIGH' : coin.dayRange > 5 ? 'MEDIUM' : 'LOW';
+
+  return {
+    accountSize: accountSize,
+    recommendedPosition: positionSize,
+    percentOfAccount: parseFloat((fraction * 100).toFixed(1)),
+    hedge: {
+      spotAction: coin.basis > 0 ? 'BUY' : 'SELL',
+      spotQty: spotQty,
+      spotCost: spotSize,
+      futuresAction: coin.basis > 0 ? 'SHORT' : 'LONG',
+      futuresQty: futuresQty,
+      futuresCost: futuresSize,
+      initialMargin: initialMargin,
+      leverage: recLeverage,
+      liquidationPrice: liqPrice,
+    },
+    expectedDaily: parseFloat(dailyReturn.toFixed(2)),
+    expectedMonthly: parseFloat(monthlyReturn.toFixed(2)),
+    expectedMonthlyROI: parseFloat(((monthlyReturn / positionSize) * 100).toFixed(2)),
+    maxDrawdown: maxDrawdown,
+    riskLevel: riskLevel,
   };
 }
 
@@ -660,6 +763,7 @@ async function handleArbitrage(req, res) {
         coin.riskReward = calculateRiskReward(coin.basis, coin.fundingRate, coin.dayRange);
         coin.strategies = generateStrategy(coin);
         coin.feeAnalysis = calculateFeeAdjustedPnL(coin.basis, coin.fundingRate);
+        coin.positionAdvice = calculatePositionAdvice(coin);
 
         return coin;
       });
@@ -715,6 +819,7 @@ async function handleArbitrage(req, res) {
             annualizedReturn: (Math.abs(r.basis) * 365).toFixed(1),
             grade: r.riskReward.grade,
             feeAnalysis: r.feeAnalysis,
+            positionAdvice: r.positionAdvice,
             openInterestUSD: r.openInterestUSD,
           };
         }),
@@ -900,6 +1005,7 @@ module.exports = {
   calculateRiskReward,
   generateStrategy,
   calculateFeeAdjustedPnL,
+  calculatePositionAdvice,
   fetchOrderBookDepth,
   fetchLiquidations,
   detectTriangularArbitrage,

@@ -681,5 +681,41 @@ test('SSE module exports whaleAlertTimer', () => {
   assert.ok(sse.whaleAlertTimer, 'Should export whaleAlertTimer');
 });
 
+// ---- Position Advice Tests ----
+console.log('\n📋 Position Advice');
+
+test('calculatePositionAdvice returns valid structure', () => {
+  const { calculatePositionAdvice } = require('./routes-whale-arb');
+  var coin = {
+    basis: 0.15, fundingRate: 0.02, spotPrice: 60000, futuresPrice: 60090,
+    dayRange: 5, riskReward: { grade: 'B', ratio: 8 },
+    feeAnalysis: { netROI: 0.05, profitable: true },
+  };
+  var advice = calculatePositionAdvice(coin, 100000);
+  assert.ok(advice.recommendedPosition > 0, 'Should recommend a position size');
+  assert.ok(advice.percentOfAccount > 0 && advice.percentOfAccount <= 100, 'Percent should be 0-100');
+  assert.ok(advice.hedge.spotAction === 'BUY', 'Positive basis = buy spot');
+  assert.ok(advice.hedge.futuresAction === 'SHORT', 'Positive basis = short futures');
+  assert.ok(advice.hedge.leverage >= 2 && advice.hedge.leverage <= 10, 'Leverage should be reasonable');
+  assert.ok(advice.hedge.liquidationPrice > 0, 'Liq price should be positive');
+  assert.ok(['HIGH', 'MEDIUM', 'LOW'].indexOf(advice.riskLevel) >= 0, 'Risk level should be valid');
+});
+
+test('calculatePositionAdvice scales by grade', () => {
+  const { calculatePositionAdvice } = require('./routes-whale-arb');
+  var coinA = { basis: 0.15, fundingRate: 0.02, spotPrice: 60000, futuresPrice: 60090, dayRange: 3, riskReward: { grade: 'A' } };
+  var coinD = { basis: 0.15, fundingRate: 0.02, spotPrice: 60000, futuresPrice: 60090, dayRange: 3, riskReward: { grade: 'D' } };
+  var adviceA = calculatePositionAdvice(coinA, 100000);
+  var adviceD = calculatePositionAdvice(coinD, 100000);
+  assert.ok(adviceA.recommendedPosition > adviceD.recommendedPosition, 'Grade A should get larger position than D');
+});
+
+test('calculatePositionAdvice uses default account size', () => {
+  const { calculatePositionAdvice } = require('./routes-whale-arb');
+  var coin = { basis: 0.1, fundingRate: 0.01, spotPrice: 3000, futuresPrice: 3003, dayRange: 4, riskReward: { grade: 'C' } };
+  var advice = calculatePositionAdvice(coin);
+  assert.strictEqual(advice.accountSize, 100000, 'Default account should be $100K');
+});
+
 // ---- Run All & Report ----
 runAll();

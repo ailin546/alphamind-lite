@@ -1147,6 +1147,22 @@ async function loadWhaleData() {
         '</span>';
     }
 
+    // Smart Signals (whale x arb correlation)
+    var sigEl = document.getElementById('whale-smart-signals');
+    if (sigEl && data.smartSignals && data.smartSignals.length > 0) {
+      sigEl.innerHTML = data.smartSignals.map(function(sig) {
+        var dirIcon = sig.direction === 'bullish' ? '<span class="up">▲</span>' : sig.direction === 'bearish' ? '<span class="down">▼</span>' : '<span style="color:var(--secondary)">◆</span>';
+        var confBadge = sig.confidence === 'high' ? '<span class="whale-badge whale">' + t('whale.highConf') + '</span>' : '<span class="whale-badge dolphin">' + t('whale.medConf') + '</span>';
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
+          dirIcon + ' ' + confBadge + ' ' +
+          '<span style="font-weight:600">' + escapeHtml(sig.type.replace(/_/g, ' ')) + '</span>' +
+          '<div style="color:var(--text-dim);font-size:0.85em;margin-top:2px">' + escapeHtml(sig.detail) + '</div>' +
+          '</div>';
+      }).join('');
+    } else if (sigEl) {
+      sigEl.innerHTML = '<span style="color:var(--text-dim)">' + t('whale.noSignals') + '</span>';
+    }
+
     // Whale Confidence Score
     renderWhaleConfidence(data);
 
@@ -1222,6 +1238,25 @@ async function loadArbitrageData() {
               '</div>' +
             '</div>';
           }
+          // Position advice section
+          var posHtml = '';
+          if (o.positionAdvice) {
+            var pa = o.positionAdvice;
+            var rlColor = pa.riskLevel === 'HIGH' ? 'var(--down)' : pa.riskLevel === 'MEDIUM' ? 'var(--warning)' : 'var(--up)';
+            posHtml = '<div class="strategy-details">' +
+              '<div style="padding:8px;background:var(--bg);border-radius:6px;border-left:3px solid ' + rlColor + ';font-size:0.85em;margin-top:6px">' +
+                '<div style="font-weight:600;margin-bottom:4px">' + t('arb.posAdvice') + '</div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">' +
+                  '<div>' + t('arb.recSize') + ': <strong>' + fmtUSD(pa.recommendedPosition) + '</strong> (' + pa.percentOfAccount + '%)</div>' +
+                  '<div>' + t('arb.riskLevel') + ': <strong style="color:' + rlColor + '">' + pa.riskLevel + '</strong></div>' +
+                  '<div>' + t('arb.hedge') + ': ' + pa.hedge.spotAction + ' ' + t('arb.spot') + ' + ' + pa.hedge.futuresAction + ' ' + t('arb.futures') + '</div>' +
+                  '<div>' + t('arb.leverage') + ': ' + pa.hedge.leverage + 'x | ' + t('arb.margin') + ': ' + fmtUSD(pa.hedge.initialMargin) + '</div>' +
+                  '<div>' + t('arb.liqPrice') + ': <span class="down">' + fmtUSD(pa.hedge.liquidationPrice) + '</span></div>' +
+                  '<div>' + t('arb.monthlyROI') + ': <strong class="up">' + fmtPct(pa.expectedMonthlyROI) + '</strong></div>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+          }
           var oiHtml = o.openInterestUSD ? ' | OI: ' + (o.openInterestUSD > 1e9 ? '$' + (o.openInterestUSD/1e9).toFixed(1) + 'B' : '$' + (o.openInterestUSD/1e6).toFixed(1) + 'M') : '';
           return '<div class="opp-card expandable" data-expand>' +
             '<div style="display:flex;justify-content:space-between;align-items:center">' +
@@ -1238,6 +1273,7 @@ async function loadArbitrageData() {
               t('arb.strategy') + ': ' + o.strategy.replace(/_/g, ' ') + oiHtml +
             '</div>' +
             feeHtml +
+            posHtml +
             '</div>';
         }).join('');
       }
@@ -1322,6 +1358,9 @@ async function loadArbitrageData() {
 
     // Load arb history chart (non-blocking)
     loadArbHistoryChart();
+
+    // Refresh comparison table with latest data
+    renderComparisonTable();
 
     showToast(t('arb.loaded'), 'success', 2000);
   } catch (err) {
@@ -1556,6 +1595,7 @@ function renderArbCoinsTable(coins) {
       '<td>' + fmt(c.dayRange, 2) + '%</td>' +
       '<td>' + oiDisplay + '</td>' +
       '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
+      '<td><button class="btn-compare" data-compare="' + escapeHtml(c.symbol) + '" title="Add to compare" style="cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--primary);border-radius:4px;padding:0 6px;font-size:0.9em">+</button></td>' +
       '</tr>';
   }).join('');
 }
@@ -1741,6 +1781,63 @@ function recalcFees() {
   showToast(t('arb.feeRecalced'), 'success', 2000);
 }
 
+// ─── Comparison Tool ──────────────────────────────────────────────────────
+var _comparisonList = JSON.parse(localStorage.getItem('am_arb_compare') || '[]');
+
+function addToComparison(symbol) {
+  if (!_arbData) return;
+  if (_comparisonList.indexOf(symbol) >= 0) {
+    showToast(symbol + ' ' + t('arb.alreadyCompared'), 'warning', 2000);
+    return;
+  }
+  if (_comparisonList.length >= 8) {
+    showToast(t('arb.compareFull'), 'warning', 2000);
+    return;
+  }
+  _comparisonList.push(symbol);
+  localStorage.setItem('am_arb_compare', JSON.stringify(_comparisonList));
+  renderComparisonTable();
+  showToast(symbol + ' ' + t('arb.addedCompare'), 'success', 1500);
+}
+
+function removeFromComparison(symbol) {
+  _comparisonList = _comparisonList.filter(function(s) { return s !== symbol; });
+  localStorage.setItem('am_arb_compare', JSON.stringify(_comparisonList));
+  renderComparisonTable();
+}
+
+function clearComparison() {
+  _comparisonList = [];
+  localStorage.setItem('am_arb_compare', '[]');
+  renderComparisonTable();
+}
+
+function renderComparisonTable() {
+  var tbody = document.getElementById('arb-compare-body');
+  if (!tbody || !_arbData) return;
+  if (_comparisonList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px">' + t('arb.compareEmpty') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _comparisonList.map(function(sym) {
+    var coin = _arbData.coins.find(function(c) { return c.symbol === sym; });
+    if (!coin) return '<tr><td colspan="8" style="color:var(--text-dim)">' + escapeHtml(sym) + ' — ' + t('arb.noData') + '</td></tr>';
+    var basisClass = coin.basis > 0 ? 'up' : coin.basis < 0 ? 'down' : '';
+    var gradeColor = coin.riskReward.grade === 'A' ? 'var(--up)' : coin.riskReward.grade === 'B' ? 'var(--secondary)' : 'var(--warning)';
+    var monthlyROI = coin.positionAdvice ? coin.positionAdvice.expectedMonthlyROI : 0;
+    return '<tr>' +
+      '<td style="font-weight:600">' + escapeHtml(coin.symbol) + '</td>' +
+      '<td class="' + basisClass + '">' + fmtPct(coin.basis) + '</td>' +
+      '<td>' + fmt(coin.fundingRate, 4) + '%</td>' +
+      '<td><span style="color:' + gradeColor + ';font-weight:700">' + coin.riskReward.grade + '</span> (' + coin.riskReward.ratio + ')</td>' +
+      '<td>' + (coin.feeAnalysis ? fmtUSD(coin.feeAnalysis.fees.total) : '--') + '</td>' +
+      '<td class="' + (coin.feeAnalysis && coin.feeAnalysis.profitable ? 'up' : 'down') + '">' + (coin.feeAnalysis ? fmtPct(coin.feeAnalysis.netROI) : '--') + '</td>' +
+      '<td class="up">' + fmtPct(monthlyROI) + '</td>' +
+      '<td><button data-rm-compare="' + escapeHtml(coin.symbol) + '" style="cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--down);border-radius:4px;padding:0 6px;font-size:0.9em">×</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
 // ─── i18n ─────────────────────────────────────────────────────────────────
 var currentLang = 'en';
 var i18n = {
@@ -1773,6 +1870,8 @@ var i18n = {
     'whale.distribution': 'Distribution (Smart Money Selling)', 'whale.adNeutral': 'Neutral (No Clear Pattern)',
     'whale.sentimentScore': 'Sentiment Score', 'whale.th.liqSide': 'Type',
     'whale.confidence': 'Whale Confidence Score', 'whale.updated': 'Updated:',
+    'whale.smartSignals': 'Smart Signals', 'whale.noSignals': 'No cross-module signals detected',
+    'whale.highConf': 'HIGH', 'whale.medConf': 'MED',
     'whale.factorTrade': 'Trade Flow', 'whale.factorLiq': 'Liquidations', 'whale.factorOB': 'Order Book', 'whale.factorOnchain': 'On-Chain',
     'whale.confBullish': 'Strong Bullish', 'whale.confSlightBull': 'Slightly Bullish', 'whale.confNeutral': 'Neutral',
     'whale.confSlightBear': 'Slightly Bearish', 'whale.confBearish': 'Strong Bearish',
@@ -1800,6 +1899,13 @@ var i18n = {
     'arb.futuresFee': 'Futures Fee', 'arb.slippage': 'Slippage', 'arb.totalFees': 'Total Fees',
     'arb.historyTitle': 'Basis Trend (Historical)', 'arb.historyNote': 'Records every fetch cycle. Resets on server restart.',
     'arb.avgBasis': 'Avg Basis %', 'arb.avgFunding': 'Avg Funding %', 'arb.profitableCount': 'Profitable #',
+    'arb.posAdvice': 'Position Sizing Advice', 'arb.recSize': 'Recommended', 'arb.riskLevel': 'Risk',
+    'arb.hedge': 'Hedge', 'arb.spot': 'Spot', 'arb.futures': 'Futures', 'arb.leverage': 'Leverage',
+    'arb.margin': 'Margin', 'arb.liqPrice': 'Liq Price', 'arb.monthlyROI': 'Monthly ROI',
+    'arb.compareTitle': 'Quick Compare', 'arb.clearCompare': 'Clear', 'arb.compareHint': 'Click + on any coin row to add',
+    'arb.compareEmpty': 'No coins added yet', 'arb.alreadyCompared': 'already in compare',
+    'arb.compareFull': 'Max 8 coins', 'arb.addedCompare': 'added to compare', 'arb.noData': 'no data',
+    'arb.grade': 'Grade',
     'export.success': 'Exported CSV', 'export.noData': 'No data to export',
     'funding.settling': 'Settling now!', 'funding.nextPayment': 'Next Funding Payment',
     'funding.countdownNote': 'Funding rates settle every 8 hours', 'funding.updated': 'Updated:',
@@ -1917,6 +2023,8 @@ var i18n = {
     'whale.distribution': '派发中 (聪明钱卖出)', 'whale.adNeutral': '中性 (无明显趋势)',
     'whale.sentimentScore': '情绪评分', 'whale.th.liqSide': '类型',
     'whale.confidence': '巨鲸信心指数', 'whale.updated': '更新于:',
+    'whale.smartSignals': '智能信号', 'whale.noSignals': '暂无跨模块关联信号',
+    'whale.highConf': '高', 'whale.medConf': '中',
     'whale.factorTrade': '交易流向', 'whale.factorLiq': '爆仓', 'whale.factorOB': '订单簿', 'whale.factorOnchain': '链上',
     'whale.confBullish': '强烈看涨', 'whale.confSlightBull': '略微看涨', 'whale.confNeutral': '中性',
     'whale.confSlightBear': '略微看跌', 'whale.confBearish': '强烈看跌',
@@ -1944,6 +2052,13 @@ var i18n = {
     'arb.futuresFee': '合约手续费', 'arb.slippage': '滑点', 'arb.totalFees': '总费用',
     'arb.historyTitle': '基差趋势（历史）', 'arb.historyNote': '每次数据获取时记录。服务器重启后清空。',
     'arb.avgBasis': '平均基差 %', 'arb.avgFunding': '平均资金费率 %', 'arb.profitableCount': '盈利机会数',
+    'arb.posAdvice': '头寸建议', 'arb.recSize': '建议仓位', 'arb.riskLevel': '风险',
+    'arb.hedge': '对冲', 'arb.spot': '现货', 'arb.futures': '合约', 'arb.leverage': '杠杆',
+    'arb.margin': '保证金', 'arb.liqPrice': '强平价', 'arb.monthlyROI': '月收益率',
+    'arb.compareTitle': '快速对比', 'arb.clearCompare': '清空', 'arb.compareHint': '点击币种行的 + 按钮添加对比',
+    'arb.compareEmpty': '暂无对比币种', 'arb.alreadyCompared': '已在对比列表中',
+    'arb.compareFull': '最多8个币种', 'arb.addedCompare': '已添加到对比', 'arb.noData': '无数据',
+    'arb.grade': '评级',
     'export.success': '已导出CSV', 'export.noData': '无数据可导出',
     'funding.settling': '正在结算!', 'funding.nextPayment': '下次资金费结算',
     'funding.countdownNote': '资金费率每8小时结算一次', 'funding.updated': '更新于:',
@@ -2180,6 +2295,7 @@ document.addEventListener('click', function(e) {
       'exportArbCSV': exportArbCSV,
       'exportArbCoins': exportArbCoins,
       'recalcFees': recalcFees,
+      'clearComparison': clearComparison,
       'mobileToggle': function() { document.querySelector('.sidebar').classList.toggle('open'); },
       'langEn': function() { setLang('en'); },
       'langZh': function() { setLang('zh'); },
@@ -2203,6 +2319,14 @@ document.addEventListener('click', function(e) {
   // Dynamic: remove alert
   var rmAlert = e.target.closest('[data-remove-alert]');
   if (rmAlert) { removeAlert(parseInt(rmAlert.dataset.removeAlert)); return; }
+
+  // Compare button on coin rows
+  var compareBtn = e.target.closest('[data-compare]');
+  if (compareBtn) { addToComparison(compareBtn.dataset.compare); return; }
+
+  // Remove from comparison
+  var rmCompare = e.target.closest('[data-rm-compare]');
+  if (rmCompare) { removeFromComparison(rmCompare.dataset.rmCompare); return; }
 
   // Expandable opp cards
   var expandCard = e.target.closest('.opp-card.expandable');

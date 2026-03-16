@@ -1232,6 +1232,14 @@ Ask me anything about cryptocurrency markets, for example:
             <div id="whale-acc-dist" style="font-size:1.1em;font-weight:600">--</div>
           </div>
 
+          <!-- Smart Signals (whale x arb correlation) -->
+          <div class="card" style="margin-top:16px; padding:12px 16px">
+            <div class="card-title" data-i18n="whale.smartSignals" style="margin-bottom:8px">Smart Signals</div>
+            <div id="whale-smart-signals" style="font-size:0.9em">
+              <span style="color:var(--text-dim)" data-i18n="whale.noSignals">No cross-module signals detected</span>
+            </div>
+          </div>
+
           <!-- Legend -->
           <div class="card" style="margin-top:16px; padding:12px 16px">
             <div class="card-title" data-i18n="whale.legend" style="margin-bottom:8px">Size Legend</div>
@@ -1359,6 +1367,34 @@ Ask me anything about cryptocurrency markets, for example:
                 <canvas id="chart-arb-history"></canvas>
               </div>
               <div style="text-align:center;font-size:0.8em;color:var(--text-dim);margin-top:4px" data-i18n="arb.historyNote">Records every fetch cycle. Resets on server restart.</div>
+            </div>
+
+            <!-- Quick Comparison Tool -->
+            <div class="card" style="margin-top:16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <h3 data-i18n="arb.compareTitle">Quick Compare</h3>
+                <button class="btn-export" data-action="clearComparison" data-i18n="arb.clearCompare">Clear</button>
+              </div>
+              <div style="font-size:0.8em;color:var(--text-dim);margin-bottom:8px" data-i18n="arb.compareHint">Click + on any coin row to add to comparison</div>
+              <div style="overflow-x:auto">
+                <table class="market-table" id="arb-compare-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="arb.th.symbol">Symbol</th>
+                      <th data-i18n="arb.basis">Basis</th>
+                      <th data-i18n="arb.fundingRate">Funding</th>
+                      <th data-i18n="arb.grade">Grade</th>
+                      <th data-i18n="arb.totalFees">Fees</th>
+                      <th data-i18n="arb.netROI">Net ROI</th>
+                      <th data-i18n="arb.monthlyROI">Monthly</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="arb-compare-body">
+                    <tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px" data-i18n="arb.compareEmpty">No coins added yet</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <!-- Data Freshness -->
