@@ -513,5 +513,121 @@ if (fs.existsSync(configDir)) {
   });
 }
 
+// ---- Whale & Arbitrage Module Tests ----
+console.log('\n📋 Whale & Arbitrage Modules');
+
+test('routes-whale-arb exports all handlers', () => {
+  const whaleArb = require('./routes-whale-arb');
+  assert.strictEqual(typeof whaleArb.handleWhaleAlert, 'function');
+  assert.strictEqual(typeof whaleArb.handleArbitrage, 'function');
+  assert.strictEqual(typeof whaleArb.handleFundingRate, 'function');
+});
+
+test('calculateRiskReward returns valid structure', () => {
+  const { calculateRiskReward } = require('./routes-whale-arb');
+  var result = calculateRiskReward(0.15, 0.02, 5.5);
+  assert.ok(result.risk >= 1 && result.risk <= 5, 'Risk should be 1-5');
+  assert.strictEqual(typeof result.reward, 'number');
+  assert.strictEqual(typeof result.ratio, 'number');
+  assert.ok(['A', 'B', 'C', 'D'].indexOf(result.grade) >= 0, 'Grade should be A-D');
+});
+
+test('calculateRiskReward handles high volatility', () => {
+  const { calculateRiskReward } = require('./routes-whale-arb');
+  var lowVol = calculateRiskReward(0.1, 0.01, 2);
+  var highVol = calculateRiskReward(0.1, 0.01, 10);
+  assert.ok(highVol.risk > lowVol.risk, 'High volatility should increase risk');
+});
+
+test('generateStrategy produces basis strategies', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: 0.2, fundingRate: 0.01, fundingAPY: 15, dayRange: 5 };
+  var strategies = generateStrategy(coin);
+  assert.ok(strategies.length > 0, 'Should generate at least one strategy');
+  var basisStrat = strategies.find(function(s) { return s.type === 'basis'; });
+  assert.ok(basisStrat, 'Should have a basis strategy');
+  assert.strictEqual(basisStrat.name, 'Cash & Carry');
+});
+
+test('generateStrategy produces reverse basis for discount', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: -0.2, fundingRate: 0.01, fundingAPY: 15, dayRange: 2 };
+  var strategies = generateStrategy(coin);
+  var basisStrat = strategies.find(function(s) { return s.type === 'basis'; });
+  assert.ok(basisStrat, 'Should have a basis strategy for discount');
+  assert.strictEqual(basisStrat.name, 'Reverse Cash & Carry');
+});
+
+test('generateStrategy produces funding rate strategy', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: 0.01, fundingRate: 0.02, fundingAPY: 25, dayRange: 2 };
+  var strategies = generateStrategy(coin);
+  var fundStrat = strategies.find(function(s) { return s.type === 'funding'; });
+  assert.ok(fundStrat, 'Should have a funding strategy');
+  assert.strictEqual(fundStrat.name, 'Funding Rate Harvest');
+});
+
+test('generateStrategy produces volatility strategy for high range', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: 0.01, fundingRate: 0.001, fundingAPY: 1, dayRange: 6 };
+  var strategies = generateStrategy(coin);
+  var volStrat = strategies.find(function(s) { return s.type === 'volatility'; });
+  assert.ok(volStrat, 'Should have a volatility strategy');
+  assert.strictEqual(volStrat.name, 'Range Trading');
+});
+
+test('calculateFeeAdjustedPnL returns valid structure', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.5, 0.02, 10000);
+  assert.strictEqual(result.positionSize, 10000);
+  assert.strictEqual(typeof result.grossProfit, 'number');
+  assert.strictEqual(typeof result.fees.spot, 'number');
+  assert.strictEqual(typeof result.fees.futures, 'number');
+  assert.strictEqual(typeof result.fees.slippage, 'number');
+  assert.strictEqual(typeof result.fees.total, 'number');
+  assert.strictEqual(typeof result.netProfit, 'number');
+  assert.strictEqual(typeof result.netROI, 'number');
+  assert.strictEqual(typeof result.profitable, 'boolean');
+  assert.strictEqual(typeof result.breakEvenBasis, 'number');
+});
+
+test('calculateFeeAdjustedPnL detects unprofitable small basis', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.01, 0.001, 10000);
+  assert.strictEqual(result.profitable, false, 'Tiny basis should not be profitable after fees');
+});
+
+test('calculateFeeAdjustedPnL detects profitable large basis', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(1.0, 0.05, 10000);
+  assert.strictEqual(result.profitable, true, 'Large basis should be profitable after fees');
+  assert.ok(result.netProfit > 0, 'Net profit should be positive');
+});
+
+test('calculateFeeAdjustedPnL defaults to $10K position', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.5, 0.02);
+  assert.strictEqual(result.positionSize, 10000);
+});
+
+test('calculateFeeAdjustedPnL fee breakdown is correct', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.5, 0.02, 10000);
+  assert.strictEqual(result.fees.spot, 10); // 0.1% of 10K
+  assert.strictEqual(result.fees.futures, 4); // 0.04% of 10K
+  assert.strictEqual(result.fees.slippage, 10); // 0.05% * 2 * 10K
+  assert.strictEqual(result.fees.total, 24); // 10+4+10
+});
+
+test('calculateRiskReward grade boundaries', () => {
+  const { calculateRiskReward } = require('./routes-whale-arb');
+  // Grade A: ratio > 10
+  var gradeA = calculateRiskReward(0.5, 0.1, 2);
+  // Grade D: ratio <= 2 (needs very small reward)
+  var gradeD = calculateRiskReward(0.001, 0.0001, 9);
+  assert.ok(['A', 'B'].indexOf(gradeA.grade) >= 0, 'High reward should get A or B grade');
+  assert.strictEqual(gradeD.grade, 'D', 'Low reward + high risk should get D grade');
+});
+
 // ---- Run All & Report ----
 runAll();
