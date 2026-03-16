@@ -564,28 +564,37 @@ async function calculateRisk() {
   if (r.error) { document.getElementById('risk-result').innerHTML = '<div class="loading">' + escapeHtml(r.error) + '</div>'; return; }
 
   var riskColors = { safe: 'risk-safe', warning: 'risk-warning', danger: 'risk-danger', liquidated: 'risk-danger' };
-  var riskLabels = { safe: 'Safe', warning: 'Warning', danger: 'Danger!', liquidated: 'LIQUIDATED!' };
   var pnlCls = r.pnlAmount >= 0 ? 'up' : 'down';
 
   document.getElementById('risk-result').innerHTML =
-    '<div class="card-title">Risk Analysis Result</div>' +
+    '<div class="card-title">' + t('risk.result') + '</div>' +
     '<div class="risk-meter" style="margin-bottom:16px;font-size:1.2em">' +
       '<div class="risk-dot ' + riskColors[r.riskRating] + '"></div>' +
-      riskLabels[r.riskRating] +
+      t('risk.' + r.riskRating) +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-      '<div><small style="color:var(--text-dim)">Current Price</small><br><strong>' + fmtUSD(r.currentPrice) + '</strong></div>' +
-      '<div><small style="color:var(--text-dim)">Position Value</small><br><strong>' + fmtUSD(r.currentValue) + '</strong></div>' +
-      '<div><small style="color:var(--text-dim)">Initial Margin</small><br><strong>' + fmtUSD(r.initialMargin) + '</strong></div>' +
-      '<div class="' + pnlCls + '"><small style="color:var(--text-dim)">Unrealized P&amp;L</small><br><strong>' + fmtUSD(r.pnlAmount) + ' (' + fmtPct(r.pnlPercentage) + ')</strong></div>' +
-      '<div><small style="color:var(--text-dim)">Liquidation Price</small><br><strong style="color:var(--accent)">' + fmtUSD(r.liquidationPrice) + '</strong></div>' +
-      '<div><small style="color:var(--text-dim)">Distance to Liq.</small><br><strong>' + fmt(r.liquidationDistance) + '%</strong></div>' +
+      '<div><small style="color:var(--text-dim)">' + t('risk.currentPrice') + '</small><br><strong>' + fmtUSD(r.currentPrice) + '</strong></div>' +
+      '<div><small style="color:var(--text-dim)">' + t('risk.positionValue') + '</small><br><strong>' + fmtUSD(r.currentValue) + '</strong></div>' +
+      '<div><small style="color:var(--text-dim)">' + t('risk.initialMargin') + '</small><br><strong>' + fmtUSD(r.initialMargin) + '</strong></div>' +
+      '<div class="' + pnlCls + '"><small style="color:var(--text-dim)">' + t('risk.unrealizedPnl') + '</small><br><strong>' + fmtUSD(r.pnlAmount) + ' (' + fmtPct(r.pnlPercentage) + ')</strong></div>' +
+      '<div><small style="color:var(--text-dim)">' + t('risk.liquidationPrice') + '</small><br><strong style="color:var(--accent)">' + fmtUSD(r.liquidationPrice) + '</strong></div>' +
+      '<div><small style="color:var(--text-dim)">' + t('risk.distanceToLiq') + '</small><br><strong>' + fmt(r.liquidationDistance) + '%</strong></div>' +
     '</div>' +
     '<div class="advice-box" style="margin-top:16px">' +
-      (r.riskRating === 'safe' ? 'Position is healthy. Maintain current risk management strategy.' :
-        r.riskRating === 'warning' ? 'Approaching risk zone. Consider reducing position or adding margin.' :
-        'CRITICAL: Position at high risk of liquidation! Strongly recommend reducing leverage or closing position.') +
+      (r.riskRating === 'safe' ? t('risk.adviceSafe') :
+        r.riskRating === 'warning' ? t('risk.adviceWarning') :
+        t('risk.adviceDanger')) +
     '</div>';
+}
+
+function resetRisk() {
+  document.getElementById('risk-symbol').selectedIndex = 0;
+  document.getElementById('risk-qty').value = '0.5';
+  document.getElementById('risk-entry').value = '70000';
+  document.getElementById('risk-leverage').value = '10';
+  document.getElementById('risk-result').innerHTML =
+    '<div class="card-title">' + t('risk.result') + '</div>' +
+    '<div class="loading">' + t('risk.inputHint') + '</div>';
 }
 
 // Price alerts
@@ -636,16 +645,17 @@ async function calcDCA() {
   var profitCls = r.profit >= 0 ? 'up' : 'down';
   document.getElementById('dca-result').innerHTML =
     '<div class="dca-result">' +
-      '<div class="dca-item"><div class="dca-item-label">Total Invested</div><div class="dca-item-value">' + fmtUSD(r.totalInvested) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">Coins Accumulated</div><div class="dca-item-value">' + r.totalCoins.toFixed(6) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">Current Value</div><div class="dca-item-value">' + fmtUSD(r.currentValue) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">Current Price</div><div class="dca-item-value">' + fmtUSD(r.currentPrice) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">Profit</div><div class="dca-item-value ' + profitCls + '">' + fmtUSD(r.profit) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">ROI</div><div class="dca-item-value ' + profitCls + '">' + fmtPct(r.profitPercent) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.totalInvested') + '</div><div class="dca-item-value">' + fmtUSD(r.totalInvested) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.coinsAccumulated') + '</div><div class="dca-item-value">' + r.totalCoins.toFixed(6) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.currentValue') + '</div><div class="dca-item-value">' + fmtUSD(r.currentValue) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.currentPrice') + '</div><div class="dca-item-value">' + fmtUSD(r.currentPrice) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.profit') + '</div><div class="dca-item-value ' + profitCls + '">' + fmtUSD(r.profit) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.roi') + '</div><div class="dca-item-value ' + profitCls + '">' + fmtPct(r.profitPercent) + '</div></div>' +
     '</div>' +
     '<div class="advice-box" style="margin-top:12px">' +
-      'DCA Strategy: Investing $' + monthlyAmount + '/month for ' + months + ' months at current ' + symbol + ' price. ' +
-      'Regular investment reduces timing risk and smooths out volatility.' +
+      (currentLang === 'zh'
+        ? '定投策略: 每月投入 $' + monthlyAmount + '，持续 ' + months + ' 个月，按当前 ' + symbol + ' 价格计算。定期投资可以降低择时风险，平滑市场波动。'
+        : 'DCA Strategy: Investing $' + monthlyAmount + '/month for ' + months + ' months at current ' + symbol + ' price. Regular investment reduces timing risk and smooths out volatility.') +
     '</div>';
 }
 
@@ -661,9 +671,9 @@ function calcPnL() {
   var cls = profit >= 0 ? 'up' : 'down';
   document.getElementById('calc-result').innerHTML =
     '<div class="dca-result" style="grid-template-columns:repeat(3,1fr)">' +
-      '<div class="dca-item"><div class="dca-item-label">Cost</div><div class="dca-item-value">' + fmtUSD(buy * qty) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">Revenue</div><div class="dca-item-value">' + fmtUSD(sell * qty) + '</div></div>' +
-      '<div class="dca-item"><div class="dca-item-label">Profit/Loss</div><div class="dca-item-value ' + cls + '">' + fmtUSD(profit) + ' (' + fmtPct(pct) + ')</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.cost') + '</div><div class="dca-item-value">' + fmtUSD(buy * qty) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.revenue') + '</div><div class="dca-item-value">' + fmtUSD(sell * qty) + '</div></div>' +
+      '<div class="dca-item"><div class="dca-item-label">' + t('tools.profitLoss') + '</div><div class="dca-item-value ' + cls + '">' + fmtUSD(profit) + ' (' + fmtPct(pct) + ')</div></div>' +
     '</div>';
 }
 
@@ -1244,6 +1254,54 @@ var i18n = {
     'funding.th.markPrice': 'Mark Price', 'funding.th.indexPrice': 'Index Price',
     'funding.th.grossApy': 'Gross APY', 'funding.th.netApy': 'Net APY',
     'funding.th.riskLevel': 'Risk Level', 'funding.th.nextFunding': 'Next Funding',
+    // Dashboard
+    'h.dashboard': 'Dashboard', 'dash.refresh': 'Refresh',
+    'dash.btcPrice': 'BTC Price', 'dash.ethPrice': 'ETH Price',
+    'dash.fearGreed': 'Fear & Greed', 'dash.marketSignal': 'Market Signal',
+    'dash.btcPrice24h': 'BTC Price (24h)', 'dash.fgHistory': 'Fear & Greed History (30d)',
+    'dash.techAnalysis': 'Technical Analysis (BTC 4H)', 'dash.loadingIndicators': 'Loading indicators...',
+    'dash.marketOverview': 'Market Overview',
+    'dash.coin': 'Coin', 'dash.price': 'Price', 'dash.change24h': '24h Change',
+    'dash.high24h': '24h High', 'dash.low24h': '24h Low', 'dash.volume24h': '24h Volume',
+    // Risk
+    'h.risk': 'Risk Control Center',
+    'risk.calculator': 'Position Risk Calculator', 'risk.coin': 'Coin',
+    'risk.positionSize': 'Position Size', 'risk.entryPrice': 'Entry Price (USDT)',
+    'risk.leverage': 'Leverage', 'risk.calculate': 'Calculate Risk', 'risk.reset': 'Reset',
+    'risk.result': 'Risk Analysis Result', 'risk.inputHint': 'Input position info and click "Calculate Risk"',
+    'risk.alerts': 'Price Alerts', 'risk.targetPrice': 'Target Price',
+    'risk.direction': 'Direction', 'risk.above': 'Above (price rises to)',
+    'risk.below': 'Below (price drops to)', 'risk.addAlert': 'Add Alert',
+    'risk.safe': 'Safe', 'risk.warning': 'Warning', 'risk.danger': 'Danger!', 'risk.liquidated': 'LIQUIDATED!',
+    'risk.currentPrice': 'Current Price', 'risk.positionValue': 'Position Value',
+    'risk.initialMargin': 'Initial Margin', 'risk.unrealizedPnl': 'Unrealized P&L',
+    'risk.liquidationPrice': 'Liquidation Price', 'risk.distanceToLiq': 'Distance to Liq.',
+    'risk.adviceSafe': 'Position is healthy. Maintain current risk management strategy.',
+    'risk.adviceWarning': 'Approaching risk zone. Consider reducing position or adding margin.',
+    'risk.adviceDanger': 'CRITICAL: Position at high risk of liquidation! Strongly recommend reducing leverage or closing position.',
+    // Tools
+    'h.tools': 'Investment Tools',
+    'tools.dca': 'DCA Calculator (Dollar Cost Averaging)', 'tools.dcaCoin': 'Coin',
+    'tools.monthlyInvestment': 'Monthly Investment (USDT)', 'tools.period': 'Period (months)',
+    'tools.calculate': 'Calculate',
+    'tools.pnl': 'Profit/Loss Calculator', 'tools.buyPrice': 'Buy Price (USDT)',
+    'tools.sellPrice': 'Sell Price (USDT)', 'tools.quantity': 'Quantity',
+    'tools.paper': 'Paper Trading Simulator (Virtual $10,000 USDT)',
+    'tools.balance': 'Balance: ', 'tools.resetTo10k': 'Reset to $10K',
+    'tools.paperCoin': 'Coin', 'tools.paperQty': 'Quantity',
+    'tools.buy': 'Buy', 'tools.sell': 'Sell', 'tools.recentTrades': 'Recent Trades',
+    'tools.noTrades': 'No trades yet — start trading!',
+    'tools.totalInvested': 'Total Invested', 'tools.coinsAccumulated': 'Coins Accumulated',
+    'tools.currentValue': 'Current Value', 'tools.currentPrice': 'Current Price',
+    'tools.profit': 'Profit', 'tools.roi': 'ROI',
+    'tools.cost': 'Cost', 'tools.revenue': 'Revenue', 'tools.profitLoss': 'Profit/Loss',
+    // AI Chat
+    'h.ai': 'AI Trading Assistant',
+    'ai.welcome': 'Welcome to AlphaMind AI Assistant! I can help you with market analysis, trading advice, and risk assessment.\n\nAsk me anything about cryptocurrency markets, for example:\n- "BTC current analysis?"\n- "Should I buy now?"\n- "What are the current risks?"\n- "Market overview"',
+    'ai.placeholder': 'Ask about crypto markets...',
+    'ai.send': 'Send',
+    'ai.btcAnalysis': 'BTC Analysis', 'ai.buyAdvice': 'Buy Advice',
+    'ai.riskCheck': 'Risk Check', 'ai.marketOverview': 'Market Overview', 'ai.sellAdvice': 'Sell Advice',
     // Common
     'btn.refresh': 'Refresh',
   },
@@ -1309,6 +1367,54 @@ var i18n = {
     'funding.th.markPrice': '标记价格', 'funding.th.indexPrice': '指数价格',
     'funding.th.grossApy': '毛年化', 'funding.th.netApy': '净年化',
     'funding.th.riskLevel': '风险等级', 'funding.th.nextFunding': '下次结算',
+    // Dashboard
+    'h.dashboard': '仪表盘', 'dash.refresh': '刷新',
+    'dash.btcPrice': 'BTC 价格', 'dash.ethPrice': 'ETH 价格',
+    'dash.fearGreed': '恐慌贪婪指数', 'dash.marketSignal': '市场信号',
+    'dash.btcPrice24h': 'BTC 价格 (24h)', 'dash.fgHistory': '恐慌贪婪指数走势 (30天)',
+    'dash.techAnalysis': '技术分析 (BTC 4H)', 'dash.loadingIndicators': '加载指标中...',
+    'dash.marketOverview': '市场总览',
+    'dash.coin': '币种', 'dash.price': '价格', 'dash.change24h': '24h 涨跌',
+    'dash.high24h': '24h 最高', 'dash.low24h': '24h 最低', 'dash.volume24h': '24h 成交量',
+    // Risk
+    'h.risk': '风控中心',
+    'risk.calculator': '仓位风险计算器', 'risk.coin': '币种',
+    'risk.positionSize': '持仓数量', 'risk.entryPrice': '入场价格 (USDT)',
+    'risk.leverage': '杠杆倍数', 'risk.calculate': '计算风险', 'risk.reset': '重置',
+    'risk.result': '风险分析结果', 'risk.inputHint': '输入仓位信息后点击"计算风险"',
+    'risk.alerts': '价格预警', 'risk.targetPrice': '目标价格',
+    'risk.direction': '方向', 'risk.above': '上穿（价格上涨至）',
+    'risk.below': '下穿（价格下跌至）', 'risk.addAlert': '添加预警',
+    'risk.safe': '安全', 'risk.warning': '警告', 'risk.danger': '危险！', 'risk.liquidated': '已爆仓！',
+    'risk.currentPrice': '当前价格', 'risk.positionValue': '持仓价值',
+    'risk.initialMargin': '初始保证金', 'risk.unrealizedPnl': '未实现盈亏',
+    'risk.liquidationPrice': '爆仓价格', 'risk.distanceToLiq': '距爆仓距离',
+    'risk.adviceSafe': '仓位健康，继续保持当前风控策略。',
+    'risk.adviceWarning': '接近风险区间，考虑减仓或追加保证金。',
+    'risk.adviceDanger': '警告：仓位面临爆仓高风险！强烈建议降低杠杆或平仓。',
+    // Tools
+    'h.tools': '投资工具',
+    'tools.dca': '定投计算器（DCA）', 'tools.dcaCoin': '币种',
+    'tools.monthlyInvestment': '每月投入 (USDT)', 'tools.period': '定投周期（月）',
+    'tools.calculate': '计算',
+    'tools.pnl': '盈亏计算器', 'tools.buyPrice': '买入价格 (USDT)',
+    'tools.sellPrice': '卖出价格 (USDT)', 'tools.quantity': '数量',
+    'tools.paper': '模拟交易（虚拟 $10,000 USDT）',
+    'tools.balance': '余额: ', 'tools.resetTo10k': '重置为 $10K',
+    'tools.paperCoin': '币种', 'tools.paperQty': '数量',
+    'tools.buy': '买入', 'tools.sell': '卖出', 'tools.recentTrades': '最近交易',
+    'tools.noTrades': '暂无交易 — 开始交易吧！',
+    'tools.totalInvested': '总投入', 'tools.coinsAccumulated': '累计持币',
+    'tools.currentValue': '当前价值', 'tools.currentPrice': '当前价格',
+    'tools.profit': '盈亏', 'tools.roi': '投资回报率',
+    'tools.cost': '成本', 'tools.revenue': '收入', 'tools.profitLoss': '盈亏',
+    // AI Chat
+    'h.ai': 'AI 智能助手',
+    'ai.welcome': '欢迎使用 AlphaMind AI 智能助手！我可以帮您进行市场分析、交易建议和风险评估。\n\n您可以问我任何关于加密货币市场的问题，例如：\n- "BTC 现在行情怎么样？"\n- "该买入吗？"\n- "目前风险如何？"\n- "市场总览"',
+    'ai.placeholder': '输入您的问题...',
+    'ai.send': '发送',
+    'ai.btcAnalysis': 'BTC 分析', 'ai.buyAdvice': '买入建议',
+    'ai.riskCheck': '风险评估', 'ai.marketOverview': '市场总览', 'ai.sellAdvice': '卖出建议',
     // Common
     'btn.refresh': '刷新',
   },
@@ -1346,6 +1452,34 @@ function setLang(lang) {
   document.querySelectorAll('[data-i18n-ph]').forEach(function(el) {
     var key = el.dataset['i18nPh'];
     if (i18n[lang][key]) el.placeholder = i18n[lang][key];
+  });
+
+  // Update AI welcome message
+  var welcomeEl = document.getElementById('ai-welcome-msg');
+  if (welcomeEl && i18n[lang]['ai.welcome']) {
+    welcomeEl.textContent = i18n[lang]['ai.welcome'];
+  }
+
+  // Update quick chat button data-quick attributes for Chinese
+  var quickMap = lang === 'zh' ? {
+    'BTC Analysis': ['BTC当前行情分析', 'BTC 分析'],
+    'Buy Advice': ['现在该买入吗？', '买入建议'],
+    'Risk Check': ['目前市场风险如何？', '风险评估'],
+    'Market Overview': ['市场总览', '市场总览'],
+    'Sell Advice': ['什么时候该卖出？', '卖出建议'],
+  } : {
+    'BTC 分析': ['BTC current analysis', 'BTC Analysis'],
+    '买入建议': ['Should I buy now?', 'Buy Advice'],
+    '风险评估': ['Current market risks', 'Risk Check'],
+    '市场总览': ['Market overview', 'Market Overview'],
+    '卖出建议': ['Sell timing advice', 'Sell Advice'],
+  };
+  document.querySelectorAll('.quick-btn[data-quick]').forEach(function(btn) {
+    var entry = quickMap[btn.textContent.trim()];
+    if (entry) {
+      btn.dataset.quick = entry[0];
+      btn.textContent = entry[1];
+    }
   });
 
   localStorage.setItem('am_lang', lang);
@@ -1414,6 +1548,7 @@ document.addEventListener('click', function(e) {
       'analyzePortfolio': analyzePortfolio,
       'loadSentiment': loadSentiment,
       'calculateRisk': calculateRisk,
+      'resetRisk': resetRisk,
       'addAlert': addAlert,
       'calcDCA': calcDCA,
       'calcPnL': calcPnL,
@@ -1484,9 +1619,13 @@ showWelcome();
 loadDashboard();
 connectSSE();
 
-// Restore language
+// Restore language (auto-detect Chinese browser if no saved preference)
 var savedLang = localStorage.getItem('am_lang');
-if (savedLang) setLang(savedLang);
+if (savedLang) {
+  setLang(savedLang);
+} else if (navigator.language && navigator.language.startsWith('zh')) {
+  setLang('zh');
+}
 
 // Auto-refresh every 30 seconds
 setInterval(function() {

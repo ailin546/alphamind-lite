@@ -593,11 +593,11 @@
       <!-- === DASHBOARD PAGE === -->
       <div id="page-dashboard" class="page active">
         <div class="header">
-          <h2>Dashboard</h2>
+          <h2 data-i18n="h.dashboard">Dashboard</h2>
           <div class="header-actions">
             <span class="live-indicator" id="data-status-indicator"></span>
             <span class="last-update" id="dash-update"></span>
-            <button class="btn" data-action="loadDashboard" title="Refresh (R)">Refresh</button>
+            <button class="btn" data-action="loadDashboard" title="Refresh (R)" data-i18n="dash.refresh">Refresh</button>
             <button class="btn" data-action="showHelp" title="Keyboard Shortcuts" style="padding:8px 10px;font-size:0.8em">?</button>
           </div>
         </div>
@@ -605,22 +605,22 @@
         <!-- Top stats -->
         <div class="grid-4" id="dash-stats">
           <div class="stat-card">
-            <div class="stat-label">BTC Price</div>
+            <div class="stat-label" data-i18n="dash.btcPrice">BTC Price</div>
             <div class="stat-value" id="dash-btc-price">--</div>
             <div class="stat-change" id="dash-btc-change">--</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">ETH Price</div>
+            <div class="stat-label" data-i18n="dash.ethPrice">ETH Price</div>
             <div class="stat-value" id="dash-eth-price">--</div>
             <div class="stat-change" id="dash-eth-change">--</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Fear & Greed</div>
+            <div class="stat-label" data-i18n="dash.fearGreed">Fear & Greed</div>
             <div class="stat-value" id="dash-fg-value">--</div>
             <div class="stat-change" id="dash-fg-text">--</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Market Signal</div>
+            <div class="stat-label" data-i18n="dash.marketSignal">Market Signal</div>
             <div class="stat-value" id="dash-signal">--</div>
             <div class="stat-change" id="dash-signal-text">--</div>
           </div>
@@ -629,11 +629,11 @@
         <!-- Charts -->
         <div class="grid-2" style="margin-top:16px">
           <div class="card">
-            <div class="card-title">BTC Price (24h)</div>
+            <div class="card-title" data-i18n="dash.btcPrice24h">BTC Price (24h)</div>
             <div class="chart-wrap"><canvas id="chart-btc"></canvas></div>
           </div>
           <div class="card">
-            <div class="card-title">Fear & Greed History (30d)</div>
+            <div class="card-title" data-i18n="dash.fgHistory">Fear & Greed History (30d)</div>
             <div class="chart-wrap"><canvas id="chart-fg"></canvas></div>
           </div>
         </div>
@@ -641,8 +641,8 @@
         <!-- Technical Signal Banner -->
         <div class="card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px" id="dash-tech-banner">
           <div>
-            <div class="card-title" style="margin-bottom:4px">Technical Analysis (BTC 4H)</div>
-            <span id="dash-ti-summary" style="font-size:0.95em;color:var(--text-dim)">Loading indicators...</span>
+            <div class="card-title" style="margin-bottom:4px" data-i18n="dash.techAnalysis">Technical Analysis (BTC 4H)</div>
+            <span id="dash-ti-summary" style="font-size:0.95em;color:var(--text-dim)" data-i18n="dash.loadingIndicators">Loading indicators...</span>
           </div>
           <div style="display:flex;gap:16px;align-items:center">
             <div style="text-align:center">
@@ -662,16 +662,16 @@
 
         <!-- Market overview -->
         <div class="card" style="margin-top:16px">
-          <div class="card-title">Market Overview</div>
+          <div class="card-title" data-i18n="dash.marketOverview">Market Overview</div>
           <table class="market-table">
             <thead>
               <tr>
-                <th>Coin</th>
-                <th>Price</th>
-                <th>24h Change</th>
-                <th>24h High</th>
-                <th>24h Low</th>
-                <th>24h Volume</th>
+                <th data-i18n="dash.coin">Coin</th>
+                <th data-i18n="dash.price">Price</th>
+                <th data-i18n="dash.change24h">24h Change</th>
+                <th data-i18n="dash.high24h">24h High</th>
+                <th data-i18n="dash.low24h">24h Low</th>
+                <th data-i18n="dash.volume24h">24h Volume</th>
               </tr>
             </thead>
             <tbody id="dash-market-body"></tbody>
@@ -822,30 +822,30 @@
       <!-- === RISK PAGE === -->
       <div id="page-risk" class="page">
         <div class="header">
-          <h2>Risk Control Center</h2>
+          <h2 data-i18n="h.risk">Risk Control Center</h2>
         </div>
 
         <div class="grid-2">
           <div class="card">
-            <div class="card-title">Position Risk Calculator</div>
+            <div class="card-title" data-i18n="risk.calculator">Position Risk Calculator</div>
             <div class="form-group">
-              <label class="form-label">Coin</label>
+              <label class="form-label" data-i18n="risk.coin">Coin</label>
               <select id="risk-symbol" class="form-input">
                 <option>BTC</option><option>ETH</option><option>BNB</option><option>SOL</option>
               </select>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Position Size</label>
+                <label class="form-label" data-i18n="risk.positionSize">Position Size</label>
                 <input type="number" id="risk-qty" class="form-input" placeholder="e.g. 0.5" step="any" value="0.5">
               </div>
               <div class="form-group">
-                <label class="form-label">Entry Price (USDT)</label>
+                <label class="form-label" data-i18n="risk.entryPrice">Entry Price (USDT)</label>
                 <input type="number" id="risk-entry" class="form-input" placeholder="e.g. 70000" step="any" value="70000">
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Leverage</label>
+              <label class="form-label" data-i18n="risk.leverage">Leverage</label>
               <select id="risk-leverage" class="form-input">
                 <option value="1">1x (Spot)</option>
                 <option value="2">2x</option>
@@ -857,38 +857,41 @@
                 <option value="100">100x</option>
               </select>
             </div>
-            <button class="btn btn-primary" data-action="calculateRisk" style="width:100%;margin-top:8px">Calculate Risk</button>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-primary" data-action="calculateRisk" style="flex:1" data-i18n="risk.calculate">Calculate Risk</button>
+              <button class="btn" data-action="resetRisk" style="flex:0 0 auto" data-i18n="risk.reset">Reset</button>
+            </div>
           </div>
 
           <div class="card" id="risk-result">
-            <div class="card-title">Risk Analysis Result</div>
-            <div class="loading">Input position info and click "Calculate Risk"</div>
+            <div class="card-title" data-i18n="risk.result">Risk Analysis Result</div>
+            <div class="loading" data-i18n="risk.inputHint">Input position info and click "Calculate Risk"</div>
           </div>
         </div>
 
         <!-- Price alerts -->
         <div class="card" style="margin-top:16px">
-          <div class="card-title">Price Alerts</div>
+          <div class="card-title" data-i18n="risk.alerts">Price Alerts</div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Coin</label>
+              <label class="form-label" data-i18n="risk.coin">Coin</label>
               <select id="alert-symbol" class="form-input">
                 <option>BTC</option><option>ETH</option><option>BNB</option><option>SOL</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">Target Price</label>
+              <label class="form-label" data-i18n="risk.targetPrice">Target Price</label>
               <input type="number" id="alert-price" class="form-input" placeholder="e.g. 100000" step="any">
             </div>
             <div class="form-group">
-              <label class="form-label">Direction</label>
+              <label class="form-label" data-i18n="risk.direction">Direction</label>
               <select id="alert-dir" class="form-input">
-                <option value="above">Above (price rises to)</option>
-                <option value="below">Below (price drops to)</option>
+                <option value="above" data-i18n="risk.above">Above (price rises to)</option>
+                <option value="below" data-i18n="risk.below">Below (price drops to)</option>
               </select>
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              <button class="btn btn-primary" data-action="addAlert" style="width:100%">Add Alert</button>
+              <button class="btn btn-primary" data-action="addAlert" style="width:100%" data-i18n="risk.addAlert">Add Alert</button>
             </div>
           </div>
           <div id="alerts-list" style="margin-top:12px"></div>
@@ -898,29 +901,29 @@
       <!-- === TOOLS PAGE === -->
       <div id="page-tools" class="page">
         <div class="header">
-          <h2>Investment Tools</h2>
+          <h2 data-i18n="h.tools">Investment Tools</h2>
         </div>
 
         <!-- DCA Calculator -->
         <div class="card">
-          <div class="card-title">DCA Calculator (Dollar Cost Averaging)</div>
+          <div class="card-title" data-i18n="tools.dca">DCA Calculator (Dollar Cost Averaging)</div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Coin</label>
+              <label class="form-label" data-i18n="tools.dcaCoin">Coin</label>
               <select id="dca-symbol" class="form-input">
                 <option>BTC</option><option>ETH</option><option>BNB</option><option>SOL</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">Monthly Investment (USDT)</label>
+              <label class="form-label" data-i18n="tools.monthlyInvestment">Monthly Investment (USDT)</label>
               <input type="number" id="dca-amount" class="form-input" value="100" step="any">
             </div>
             <div class="form-group">
-              <label class="form-label">Period (months)</label>
+              <label class="form-label" data-i18n="tools.period">Period (months)</label>
               <input type="number" id="dca-months" class="form-input" value="12" min="1" max="120">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              <button class="btn btn-primary" data-action="calcDCA" style="width:100%">Calculate</button>
+              <button class="btn btn-primary" data-action="calcDCA" style="width:100%" data-i18n="tools.calculate">Calculate</button>
             </div>
           </div>
           <div id="dca-result"></div>
@@ -928,22 +931,22 @@
 
         <!-- Profit/Loss Calculator -->
         <div class="card" style="margin-top:16px">
-          <div class="card-title">Profit/Loss Calculator</div>
+          <div class="card-title" data-i18n="tools.pnl">Profit/Loss Calculator</div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Buy Price (USDT)</label>
+              <label class="form-label" data-i18n="tools.buyPrice">Buy Price (USDT)</label>
               <input type="number" id="calc-buy" class="form-input" placeholder="e.g. 60000" step="any">
             </div>
             <div class="form-group">
-              <label class="form-label">Sell Price (USDT)</label>
+              <label class="form-label" data-i18n="tools.sellPrice">Sell Price (USDT)</label>
               <input type="number" id="calc-sell" class="form-input" placeholder="e.g. 80000" step="any">
             </div>
             <div class="form-group">
-              <label class="form-label">Quantity</label>
+              <label class="form-label" data-i18n="tools.quantity">Quantity</label>
               <input type="number" id="calc-qty" class="form-input" placeholder="e.g. 0.5" step="any">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              <button class="btn btn-primary" data-action="calcPnL" style="width:100%">Calculate</button>
+              <button class="btn btn-primary" data-action="calcPnL" style="width:100%" data-i18n="tools.calculate">Calculate</button>
             </div>
           </div>
           <div id="calc-result"></div>
@@ -951,34 +954,34 @@
 
         <!-- Paper Trading Simulator -->
         <div class="card" style="margin-top:16px">
-          <div class="card-title">Paper Trading Simulator (Virtual $10,000 USDT)</div>
+          <div class="card-title" data-i18n="tools.paper">Paper Trading Simulator (Virtual $10,000 USDT)</div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
             <div>
-              <span style="color:var(--text-dim)">Balance: </span>
+              <span style="color:var(--text-dim)" data-i18n="tools.balance">Balance: </span>
               <span id="paper-balance" style="font-size:1.3em;font-weight:700">$10,000.00</span>
             </div>
-            <button class="btn" data-action="resetPaperTrading" style="font-size:0.8em">Reset to $10K</button>
+            <button class="btn" data-action="resetPaperTrading" style="font-size:0.8em" data-i18n="tools.resetTo10k">Reset to $10K</button>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Coin</label>
+              <label class="form-label" data-i18n="tools.paperCoin">Coin</label>
               <select id="paper-symbol" class="form-input">
                 <option>BTC</option><option>ETH</option><option>BNB</option><option>SOL</option><option>XRP</option><option>DOGE</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">Quantity</label>
+              <label class="form-label" data-i18n="tools.paperQty">Quantity</label>
               <input type="number" id="paper-qty" class="form-input" placeholder="e.g. 0.01" step="any">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
-              <button class="btn" data-action="paperTradeBuy" style="width:50%;background:var(--up);color:#000;border-color:var(--up);font-weight:600">Buy</button>
-              <button class="btn" data-action="paperTradeSell" style="width:50%;background:var(--down);color:#fff;border-color:var(--down);font-weight:600">Sell</button>
+              <button class="btn" data-action="paperTradeBuy" style="width:50%;background:var(--up);color:#000;border-color:var(--up);font-weight:600" data-i18n="tools.buy">Buy</button>
+              <button class="btn" data-action="paperTradeSell" style="width:50%;background:var(--down);color:#fff;border-color:var(--down);font-weight:600" data-i18n="tools.sell">Sell</button>
             </div>
           </div>
           <div id="paper-result" style="margin-top:8px"></div>
           <div style="margin-top:12px">
-            <div class="card-title" style="font-size:0.75em">Recent Trades</div>
-            <div id="paper-trades" style="max-height:200px;overflow-y:auto;font-size:0.85em;color:var(--text-dim)">No trades yet — start trading!</div>
+            <div class="card-title" style="font-size:0.75em" data-i18n="tools.recentTrades">Recent Trades</div>
+            <div id="paper-trades" style="max-height:200px;overflow-y:auto;font-size:0.85em;color:var(--text-dim)" data-i18n="tools.noTrades">No trades yet — start trading!</div>
           </div>
         </div>
       </div>
@@ -986,11 +989,11 @@
       <!-- === AI CHAT PAGE === -->
       <div id="page-ai" class="page">
         <div class="header">
-          <h2>AI Trading Assistant</h2>
+          <h2 data-i18n="h.ai">AI Trading Assistant</h2>
         </div>
         <div class="card chat-container">
           <div class="chat-messages" id="chat-messages">
-            <div class="chat-msg ai">Welcome to AlphaMind AI Assistant! I can help you with market analysis, trading advice, and risk assessment.
+            <div class="chat-msg ai" id="ai-welcome-msg">Welcome to AlphaMind AI Assistant! I can help you with market analysis, trading advice, and risk assessment.
 
 Ask me anything about cryptocurrency markets, for example:
 - "BTC current analysis?"
@@ -999,15 +1002,15 @@ Ask me anything about cryptocurrency markets, for example:
 - "Market overview"</div>
           </div>
           <div class="quick-actions" style="padding:0 16px">
-            <button class="quick-btn" data-quick="BTC current analysis">BTC Analysis</button>
-            <button class="quick-btn" data-quick="Should I buy now?">Buy Advice</button>
-            <button class="quick-btn" data-quick="Current market risks">Risk Check</button>
-            <button class="quick-btn" data-quick="Market overview">Market Overview</button>
-            <button class="quick-btn" data-quick="Sell timing advice">Sell Advice</button>
+            <button class="quick-btn" data-quick="BTC当前行情分析" data-i18n="ai.btcAnalysis">BTC Analysis</button>
+            <button class="quick-btn" data-quick="现在该买入吗？" data-i18n="ai.buyAdvice">Buy Advice</button>
+            <button class="quick-btn" data-quick="目前市场风险如何？" data-i18n="ai.riskCheck">Risk Check</button>
+            <button class="quick-btn" data-quick="市场总览" data-i18n="ai.marketOverview">Market Overview</button>
+            <button class="quick-btn" data-quick="什么时候该卖出？" data-i18n="ai.sellAdvice">Sell Advice</button>
           </div>
           <div class="chat-input-bar">
-            <input type="text" id="chat-input" class="chat-input" placeholder="Ask about crypto markets..." aria-label="Chat message input">
-            <button class="btn btn-primary" data-action="sendChat">Send</button>
+            <input type="text" id="chat-input" class="chat-input" placeholder="Ask about crypto markets..." data-i18n-ph="ai.placeholder" aria-label="Chat message input">
+            <button class="btn btn-primary" data-action="sendChat" data-i18n="ai.send">Send</button>
           </div>
         </div>
       </div>
