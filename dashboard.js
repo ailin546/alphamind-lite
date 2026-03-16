@@ -965,6 +965,7 @@ async function loadWhaleData() {
   if (!content) return;
   try {
     var data = await api('/api/whale');
+    _whaleData = data; // Cache for sorting/export
 
     // Summary stats
     var el;
@@ -995,25 +996,8 @@ async function loadWhaleData() {
         '</div>';
     }
 
-    // Large trades table
-    var tbody = document.getElementById('whale-trades-body');
-    if (tbody) {
-      if (data.largeTrades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
-      } else {
-        tbody.innerHTML = data.largeTrades.map(function(tr) {
-          var tierClass = tr.usd >= 500000 ? 'whale' : tr.usd >= 200000 ? 'shark' : 'dolphin';
-          return '<tr>' +
-            '<td>' + (tr.time ? new Date(tr.time).toLocaleTimeString() : '--') + '</td>' +
-            '<td style="font-weight:600">' + escapeHtml(tr.symbol || 'BTC') + '</td>' +
-            '<td><span class="side-badge ' + tr.side + '">' + tr.side.toUpperCase() + '</span></td>' +
-            '<td>' + fmtUSD(tr.price) + '</td>' +
-            '<td>' + fmt(tr.qty, 4) + (tr.fills > 1 ? ' <small style="color:var(--text-dim)">(' + tr.fills + ' fills)</small>' : '') + '</td>' +
-            '<td style="font-weight:600"><span class="whale-badge ' + tierClass + '">' + fmtUSD(tr.usd) + '</span></td>' +
-            '</tr>';
-        }).join('');
-      }
-    }
+    // Large trades table (using shared render function)
+    renderWhaleTradesTable(data.largeTrades);
 
     // Update trade count with tier info
     el = document.getElementById('whale-trade-count');
@@ -1039,8 +1023,9 @@ async function loadWhaleData() {
         onchainBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">' + t('whale.noOnchain') + '</td></tr>';
       } else {
         onchainBody.innerHTML = data.onchain.transactions.map(function(tx) {
+          var fullHash = tx.hash.replace('...', '');
           return '<tr>' +
-            '<td style="font-family:monospace;font-size:0.85em">' + escapeHtml(tx.hash) + '</td>' +
+            '<td style="font-family:monospace;font-size:0.85em"><a href="https://blockchain.info/tx/' + escapeHtml(fullHash) + '" target="_blank" rel="noopener" style="color:var(--secondary);text-decoration:none" title="' + t('whale.viewOnChain') + '">' + escapeHtml(tx.hash) + ' ↗</a></td>' +
             '<td style="font-weight:600">' + fmt(tx.btc, 2) + ' BTC</td>' +
             '<td>' + fmtUSD(tx.usd) + '</td>' +
             '<td><span class="whale-badge ' + tx.size + '">' + tx.size + '</span></td>' +
@@ -1120,6 +1105,13 @@ async function loadWhaleData() {
         '</span>';
     }
 
+    // Whale Confidence Score
+    renderWhaleConfidence(data);
+
+    // Data freshness
+    var freshEl = document.getElementById('whale-update-time');
+    if (freshEl) freshEl.textContent = t('whale.updated') + ' ' + new Date().toLocaleTimeString();
+
     showToast(t('whale.loaded'), 'success', 2000);
   } catch (err) {
     document.getElementById('whale-content').innerHTML =
@@ -1132,6 +1124,7 @@ async function loadWhaleData() {
 async function loadArbitrageData() {
   try {
     var data = await api('/api/arbitrage');
+    _arbData = data; // Cache for sorting/export
 
     // Stats
     var el;
@@ -1162,7 +1155,7 @@ async function loadArbitrageData() {
       if (oldSummary.length > 1) oldSummary[0].remove();
     }
 
-    // Basis opportunities
+    // Basis opportunities (expandable cards with fee details)
     var basisEl = document.getElementById('arb-basis-opps');
     if (basisEl) {
       if (data.opportunities.basis.length === 0) {
@@ -1170,19 +1163,39 @@ async function loadArbitrageData() {
       } else {
         basisEl.innerHTML = data.opportunities.basis.map(function(o) {
           var gradeColor = o.grade === 'A' ? 'var(--up)' : o.grade === 'B' ? 'var(--secondary)' : 'var(--warning)';
-          return '<div class="opp-card">' +
+          var feeHtml = '';
+          if (o.feeAnalysis) {
+            var fa = o.feeAnalysis;
+            feeHtml = '<div class="strategy-details">' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;padding:8px;background:var(--bg-card);border-radius:6px;font-size:0.85em">' +
+                '<div>' + t('arb.grossProfit') + ': <strong>' + fmtUSD(fa.grossProfit) + '</strong></div>' +
+                '<div>' + t('arb.fundingIncome') + ': <strong>' + fmtUSD(fa.fundingIncome) + '</strong></div>' +
+                '<div>' + t('arb.spotFee') + ': <span class="down">' + fmtUSD(fa.fees.spot) + '</span></div>' +
+                '<div>' + t('arb.futuresFee') + ': <span class="down">' + fmtUSD(fa.fees.futures) + '</span></div>' +
+                '<div>' + t('arb.slippage') + ': <span class="down">' + fmtUSD(fa.fees.slippage) + '</span></div>' +
+                '<div>' + t('arb.totalFees') + ': <span class="down">' + fmtUSD(fa.fees.total) + '</span></div>' +
+                '<div style="grid-column:span 2;border-top:1px solid var(--border);padding-top:4px;margin-top:4px">' +
+                  t('arb.netProfit') + ': <strong class="' + (fa.profitable ? 'up' : 'down') + '">' + fmtUSD(fa.netProfit) + '</strong> (' + fmtPct(fa.netROI) + ')' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+          }
+          var oiHtml = o.openInterestUSD ? ' | OI: ' + (o.openInterestUSD > 1e9 ? '$' + (o.openInterestUSD/1e9).toFixed(1) + 'B' : '$' + (o.openInterestUSD/1e6).toFixed(1) + 'M') : '';
+          return '<div class="opp-card expandable" data-expand>' +
             '<div style="display:flex;justify-content:space-between;align-items:center">' +
               '<div>' +
                 '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
                 '<span class="whale-badge ' + (o.direction === 'premium' ? 'whale' : 'dolphin') + '">' + o.direction + '</span> ' +
                 '<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:' + gradeColor + ';color:#000;font-weight:700;font-size:0.8em">' + o.grade + '</span>' +
+                '<span class="expand-icon">▼</span>' +
               '</div>' +
-              '<span style="color:var(--primary);font-weight:600">' + (currentLang === 'zh' ? '年化' : 'APY') + ': ' + o.annualizedReturn + '%</span>' +
+              '<span style="color:var(--primary);font-weight:600">' + t('arb.apy') + ': ' + o.annualizedReturn + '%</span>' +
             '</div>' +
             '<div class="opp-detail" style="margin-top:6px">' +
               t('arb.basis') + ': ' + fmtPct(o.basis) + ' | ' +
-              (currentLang === 'zh' ? '策略' : 'Strategy') + ': ' + o.strategy.replace(/_/g, ' ') +
+              t('arb.strategy') + ': ' + o.strategy.replace(/_/g, ' ') + oiHtml +
             '</div>' +
+            feeHtml +
             '</div>';
         }).join('');
       }
@@ -1210,28 +1223,8 @@ async function loadArbitrageData() {
       }
     }
 
-    // Coins table with grade + OI columns
-    var coinsBody = document.getElementById('arb-coins-body');
-    if (coinsBody) {
-      coinsBody.innerHTML = data.coins.map(function(c) {
-        var basisClass = Math.abs(c.basis) > 0.05 ? (c.basis > 0 ? 'up' : 'down') : '';
-        var gradeColor = c.riskReward && c.riskReward.grade === 'A' ? 'var(--up)' : c.riskReward && c.riskReward.grade === 'B' ? 'var(--secondary)' : 'var(--text-dim)';
-        var fundingTrendIcon = c.fundingTrend === 'rising' ? ' <span style="color:var(--up)" title="Rising">&#9650;</span>' : c.fundingTrend === 'falling' ? ' <span style="color:var(--down)" title="Falling">&#9660;</span>' : '';
-        var oiDisplay = c.openInterestUSD > 1e9 ? '$' + (c.openInterestUSD / 1e9).toFixed(1) + 'B' : c.openInterestUSD > 1e6 ? '$' + (c.openInterestUSD / 1e6).toFixed(1) + 'M' : fmtUSD(c.openInterestUSD || 0);
-        return '<tr>' +
-          '<td style="font-weight:600">' + escapeHtml(c.symbol) +
-            (c.riskReward ? ' <span style="color:' + gradeColor + ';font-size:0.8em">' + c.riskReward.grade + '</span>' : '') + '</td>' +
-          '<td>' + fmtUSD(c.spotPrice) + '</td>' +
-          '<td>' + fmtUSD(c.futuresPrice) + '</td>' +
-          '<td class="' + basisClass + '">' + fmtPct(c.basis) + '</td>' +
-          '<td>' + fmt(c.fundingRate, 4) + '%' + fundingTrendIcon + '</td>' +
-          '<td class="' + (Math.abs(c.fundingAPY) > 15 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
-          '<td>' + fmt(c.dayRange, 2) + '%</td>' +
-          '<td>' + oiDisplay + '</td>' +
-          '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
-          '</tr>';
-      }).join('');
-    }
+    // Coins table (using shared render function)
+    renderArbCoinsTable(data.coins);
 
     // Triangular arbitrage
     var triEl = document.getElementById('arb-tri-opps');
@@ -1281,6 +1274,10 @@ async function loadArbitrageData() {
       }
     }
 
+    // Data freshness
+    var arbFresh = document.getElementById('arb-update-time');
+    if (arbFresh) arbFresh.textContent = t('arb.updated') + ' ' + new Date().toLocaleTimeString();
+
     showToast(t('arb.loaded'), 'success', 2000);
   } catch (err) {
     var cont = document.getElementById('arb-scanner-tab');
@@ -1292,6 +1289,7 @@ async function loadArbitrageData() {
 async function loadFundingRateData() {
   try {
     var data = await api('/api/funding-rate');
+    _fundingData = data;
 
     // Sentiment summary
     var el;
@@ -1305,29 +1303,36 @@ async function loadFundingRateData() {
     el = document.getElementById('funding-negative');
     if (el) el.textContent = data.marketSentiment.negativeCount;
 
-    // Opportunities
+    // Opportunities with sparklines
     var oppsEl = document.getElementById('funding-opps');
     if (oppsEl) {
       if (data.opportunities.length === 0) {
         oppsEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('funding.noOpps') + '</p>';
       } else {
         oppsEl.innerHTML = data.opportunities.map(function(o) {
+          var sparkHtml = o.history ? ' ' + renderSparkline(o.history.map(function(h) { return h.rate; }), 14) : '';
+          var trendLabel = o.trend ? ' <span style="font-size:0.8em;color:var(--text-dim)">(' + o.trend + ')</span>' : '';
           return '<div class="opp-card">' +
-            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
-            '<span class="risk-badge ' + o.riskLevel + '">' + o.riskLevel + '</span>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<div><span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
+              '<span class="risk-badge ' + o.riskLevel + '">' + o.riskLevel + '</span>' + trendLabel + '</div>' +
+              '<div>' + sparkHtml + '</div>' +
+            '</div>' +
             '<div class="opp-detail">' + t('funding.rate') + ': ' + fmt(o.fundingRate, 4) + '% | APY: ' + fmt(o.grossAPY, 1) + '% | ' + t('funding.monthly') + ': $' + fmt(o.monthlyYield, 0) + '</div>' +
             '</div>';
         }).join('');
       }
     }
 
-    // Rates table
+    // Rates table with sparklines and trend
     var ratesBody = document.getElementById('funding-rates-body');
     if (ratesBody) {
       ratesBody.innerHTML = data.rates.map(function(r) {
+        var sparkHtml = r.history ? renderSparkline(r.history.map(function(h) { return h.rate; }), 12) : '';
+        var trendIcon = r.trend === 'rising' ? ' <span style="color:var(--up)">&#9650;</span>' : r.trend === 'falling' ? ' <span style="color:var(--down)">&#9660;</span>' : '';
         return '<tr>' +
           '<td style="font-weight:600">' + escapeHtml(r.symbol) + '</td>' +
-          '<td class="' + (r.fundingRate > 0 ? 'up' : r.fundingRate < 0 ? 'down' : '') + '">' + fmt(r.fundingRate, 4) + '%</td>' +
+          '<td class="' + (r.fundingRate > 0 ? 'up' : r.fundingRate < 0 ? 'down' : '') + '">' + fmt(r.fundingRate, 4) + '%' + trendIcon + ' ' + sparkHtml + '</td>' +
           '<td>' + fmtUSD(r.markPrice) + '</td>' +
           '<td>' + fmtUSD(r.indexPrice) + '</td>' +
           '<td>' + fmt(r.grossAPY, 1) + '%</td>' +
@@ -1337,6 +1342,16 @@ async function loadFundingRateData() {
           '</tr>';
       }).join('');
     }
+
+    // Start countdown timer (use earliest nextFundingTime)
+    if (data.rates.length > 0) {
+      var earliest = data.rates.reduce(function(min, r) { return r.nextFundingTime < min ? r.nextFundingTime : min; }, data.rates[0].nextFundingTime);
+      startFundingCountdown(earliest);
+    }
+
+    // Data freshness
+    var fundFresh = document.getElementById('funding-update-time');
+    if (fundFresh) fundFresh.textContent = t('funding.updated') + ' ' + new Date().toLocaleTimeString();
 
     showToast(t('funding.loaded'), 'success', 2000);
   } catch (err) {
@@ -1360,6 +1375,267 @@ function showFundingTab() {
   document.querySelectorAll('.arb-tab').forEach(function(t) { t.classList.remove('active'); });
   document.querySelector('[data-action="showFundingTab"]').classList.add('active');
   loadFundingRateData();
+}
+
+// ─── Cached Data for Sorting/Export ────────────────────────────────────────
+var _whaleData = null;
+var _arbData = null;
+var _fundingData = null;
+var _nextFundingTime = 0;
+var _fundingCountdownTimer = null;
+
+// ─── Table Sorting ──────────────────────────────────────────────────────
+function sortTableData(data, key, asc) {
+  return data.slice().sort(function(a, b) {
+    var va = a[key], vb = b[key];
+    if (typeof va === 'string') return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+    va = va || 0; vb = vb || 0;
+    return asc ? va - vb : vb - va;
+  });
+}
+
+function handleSortClick(e) {
+  var th = e.target.closest('th.sortable');
+  if (!th) return;
+  var table = th.closest('table');
+  if (!table) return;
+  var key = th.dataset.sort;
+  var wasDesc = th.classList.contains('sort-desc');
+  // Reset all sort indicators in this table
+  table.querySelectorAll('th.sortable').forEach(function(h) { h.classList.remove('sort-asc', 'sort-desc'); });
+  // Toggle direction
+  var asc = wasDesc;
+  th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+
+  if (table.id === 'whale-trades-table' && _whaleData) {
+    renderWhaleTradesTable(sortTableData(_whaleData.largeTrades, key, asc));
+  } else if (table.id === 'arb-coins-table' && _arbData) {
+    renderArbCoinsTable(sortTableData(_arbData.coins, key, asc));
+  }
+}
+
+function renderWhaleTradesTable(trades) {
+  var tbody = document.getElementById('whale-trades-body');
+  if (!tbody) return;
+  if (!trades || trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = trades.map(function(tr) {
+    var tierClass = tr.usd >= 500000 ? 'whale' : tr.usd >= 200000 ? 'shark' : 'dolphin';
+    return '<tr>' +
+      '<td>' + (tr.time ? new Date(tr.time).toLocaleTimeString() : '--') + '</td>' +
+      '<td style="font-weight:600">' + escapeHtml(tr.symbol || 'BTC') + '</td>' +
+      '<td><span class="side-badge ' + tr.side + '">' + tr.side.toUpperCase() + '</span></td>' +
+      '<td>' + fmtUSD(tr.price) + '</td>' +
+      '<td>' + fmt(tr.qty, 4) + (tr.fills > 1 ? ' <small style="color:var(--text-dim)">(' + tr.fills + ' fills)</small>' : '') + '</td>' +
+      '<td style="font-weight:600"><span class="whale-badge ' + tierClass + '">' + fmtUSD(tr.usd) + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function renderArbCoinsTable(coins) {
+  var coinsBody = document.getElementById('arb-coins-body');
+  if (!coinsBody) return;
+  coinsBody.innerHTML = coins.map(function(c) {
+    var basisClass = Math.abs(c.basis) > 0.05 ? (c.basis > 0 ? 'up' : 'down') : '';
+    var gradeColor = c.riskReward && c.riskReward.grade === 'A' ? 'var(--up)' : c.riskReward && c.riskReward.grade === 'B' ? 'var(--secondary)' : 'var(--text-dim)';
+    var fundingTrendIcon = c.fundingTrend === 'rising' ? ' <span style="color:var(--up)" title="Rising">&#9650;</span>' : c.fundingTrend === 'falling' ? ' <span style="color:var(--down)" title="Falling">&#9660;</span>' : '';
+    var oiDisplay = c.openInterestUSD > 1e9 ? '$' + (c.openInterestUSD / 1e9).toFixed(1) + 'B' : c.openInterestUSD > 1e6 ? '$' + (c.openInterestUSD / 1e6).toFixed(1) + 'M' : fmtUSD(c.openInterestUSD || 0);
+    return '<tr>' +
+      '<td style="font-weight:600">' + escapeHtml(c.symbol) +
+        (c.riskReward ? ' <span style="color:' + gradeColor + ';font-size:0.8em">' + c.riskReward.grade + '</span>' : '') + '</td>' +
+      '<td>' + fmtUSD(c.spotPrice) + '</td>' +
+      '<td>' + fmtUSD(c.futuresPrice) + '</td>' +
+      '<td class="' + basisClass + '">' + fmtPct(c.basis) + '</td>' +
+      '<td>' + fmt(c.fundingRate, 4) + '%' + fundingTrendIcon + '</td>' +
+      '<td class="' + (Math.abs(c.fundingAPY) > 15 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
+      '<td>' + fmt(c.dayRange, 2) + '%</td>' +
+      '<td>' + oiDisplay + '</td>' +
+      '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+// ─── Whale Confidence Score ──────────────────────────────────────────────
+function renderWhaleConfidence(data) {
+  var score = 50; // neutral baseline
+  var factors = [];
+
+  // Factor 1: Buy/sell ratio (0-25 points)
+  var buyRatio = data.summary.buyRatio || 50;
+  var tradeScore = Math.round((buyRatio - 50) * 0.5);
+  score += tradeScore;
+  factors.push(t('whale.factorTrade') + ': ' + (tradeScore > 0 ? '+' : '') + tradeScore);
+
+  // Factor 2: Liquidation imbalance (-15 to +15)
+  if (data.liquidations && data.liquidations.summary) {
+    var liq = data.liquidations.summary;
+    var liqScore = 0;
+    if (liq.shortLiqVolume > liq.longLiqVolume * 1.5) liqScore = 10;
+    else if (liq.longLiqVolume > liq.shortLiqVolume * 1.5) liqScore = -10;
+    score += liqScore;
+    factors.push(t('whale.factorLiq') + ': ' + (liqScore > 0 ? '+' : '') + liqScore);
+  }
+
+  // Factor 3: Order book depth (-10 to +10)
+  if (data.orderBook && data.orderBook.btc) {
+    var imb = data.orderBook.btc.imbalance || 1;
+    var obScore = Math.round((imb - 1) * 15);
+    obScore = Math.max(-10, Math.min(10, obScore));
+    score += obScore;
+    factors.push(t('whale.factorOB') + ': ' + (obScore > 0 ? '+' : '') + obScore);
+  }
+
+  // Factor 4: On-chain activity
+  if (data.onchain && data.onchain.transactions.length > 5) {
+    score += 5;
+    factors.push(t('whale.factorOnchain') + ': +5');
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  var label = score >= 70 ? t('whale.confBullish') : score >= 55 ? t('whale.confSlightBull') : score >= 45 ? t('whale.confNeutral') : score >= 30 ? t('whale.confSlightBear') : t('whale.confBearish');
+  var color = score >= 70 ? 'var(--up)' : score >= 55 ? '#66bb6a' : score >= 45 ? 'var(--text-dim)' : score >= 30 ? '#ffa726' : 'var(--down)';
+
+  var valEl = document.getElementById('whale-confidence-value');
+  var fillEl = document.getElementById('whale-confidence-fill');
+  var labelEl = document.getElementById('whale-confidence-label');
+  var factorsEl = document.getElementById('whale-confidence-factors');
+
+  if (valEl) { valEl.textContent = score; valEl.style.color = color; }
+  if (fillEl) { fillEl.style.width = score + '%'; fillEl.style.background = color; }
+  if (labelEl) { labelEl.textContent = label; labelEl.style.color = color; }
+  if (factorsEl) { factorsEl.textContent = factors.join(' | '); }
+}
+
+// ─── Funding Countdown Timer ─────────────────────────────────────────────
+function startFundingCountdown(nextTime) {
+  _nextFundingTime = nextTime;
+  if (_fundingCountdownTimer) clearInterval(_fundingCountdownTimer);
+  updateFundingCountdown();
+  _fundingCountdownTimer = setInterval(updateFundingCountdown, 1000);
+}
+
+function updateFundingCountdown() {
+  var el = document.getElementById('funding-countdown');
+  if (!el || !_nextFundingTime) return;
+  var diff = _nextFundingTime - Date.now();
+  if (diff <= 0) { el.textContent = t('funding.settling'); el.style.color = 'var(--up)'; return; }
+  var h = Math.floor(diff / 3600000);
+  var m = Math.floor((diff % 3600000) / 60000);
+  var s = Math.floor((diff % 60000) / 1000);
+  el.textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+// ─── Sparkline Renderer ──────────────────────────────────────────────────
+function renderSparkline(values, height) {
+  height = height || 16;
+  if (!values || values.length < 2) return '';
+  var max = Math.max.apply(null, values.map(function(v) { return Math.abs(v); }));
+  if (max === 0) max = 1;
+  var lastVal = values[values.length - 1];
+  var color = lastVal >= 0 ? 'var(--up)' : 'var(--down)';
+  var bars = values.map(function(v) {
+    var h = Math.max(2, Math.round((Math.abs(v) / max) * height));
+    var c = v >= 0 ? 'var(--up)' : 'var(--down)';
+    return '<span class="sparkline-bar" style="height:' + h + 'px;background:' + c + '"></span>';
+  }).join('');
+  return '<span class="sparkline" style="height:' + height + 'px;line-height:' + height + 'px">' + bars + '</span>';
+}
+
+// ─── CSV Export Functions ────────────────────────────────────────────────
+function downloadCSV(filename, rows) {
+  var csv = rows.map(function(r) {
+    return r.map(function(cell) {
+      var s = String(cell == null ? '' : cell);
+      return s.indexOf(',') >= 0 || s.indexOf('"') >= 0 ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast(t('export.success'), 'success', 2000);
+}
+
+function exportWhaleCSV() {
+  if (!_whaleData) { showToast(t('export.noData'), 'error'); return; }
+  var rows = [['Time', 'Symbol', 'Side', 'Price', 'Quantity', 'USD Value', 'Fills']];
+  (_whaleData.largeTrades || []).forEach(function(tr) {
+    rows.push([tr.time, tr.symbol, tr.side, tr.price, tr.qty, tr.usd, tr.fills]);
+  });
+  if (_whaleData.liquidations) {
+    rows.push([]);
+    rows.push(['--- Liquidations ---']);
+    rows.push(['Time', 'Symbol', 'Side', 'Price', 'Quantity', 'USD Value', 'Tier']);
+    (_whaleData.liquidations.recent || []).forEach(function(l) {
+      rows.push([l.time, l.symbol, l.side, l.price, l.qty, l.usd, l.tier]);
+    });
+  }
+  downloadCSV('alphamind-whale-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
+
+function exportWhaleTrades() {
+  if (!_whaleData || !_whaleData.largeTrades) { showToast(t('export.noData'), 'error'); return; }
+  var rows = [['Time', 'Symbol', 'Side', 'Price', 'Quantity', 'USD Value', 'Fills']];
+  _whaleData.largeTrades.forEach(function(tr) { rows.push([tr.time, tr.symbol, tr.side, tr.price, tr.qty, tr.usd, tr.fills]); });
+  downloadCSV('whale-trades-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
+
+function exportArbCSV() {
+  if (!_arbData) { showToast(t('export.noData'), 'error'); return; }
+  var rows = [['Symbol', 'Spot', 'Futures', 'Basis%', 'FundingRate%', 'FundingAPY%', 'DayRange%', 'OpenInterest$', 'Volume$', 'Grade', 'NetROI%']];
+  _arbData.coins.forEach(function(c) {
+    rows.push([c.symbol, c.spotPrice, c.futuresPrice, c.basis.toFixed(4), c.fundingRate.toFixed(4), c.fundingAPY.toFixed(1),
+      c.dayRange.toFixed(2), c.openInterestUSD || 0, c.volume, c.riskReward ? c.riskReward.grade : '', c.feeAnalysis ? c.feeAnalysis.netROI : '']);
+  });
+  downloadCSV('alphamind-arb-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
+
+function exportArbCoins() { exportArbCSV(); }
+
+// ─── Position Size Recalculation ─────────────────────────────────────────
+function recalcFees() {
+  if (!_arbData) return;
+  var input = document.getElementById('arb-position-size');
+  var size = input ? parseInt(input.value) : 10000;
+  if (isNaN(size) || size < 100) { showToast(t('arb.invalidSize'), 'error'); return; }
+
+  // Recalculate fee analysis for all coins via API
+  var feeEl = document.getElementById('arb-fee-adjusted');
+  if (!feeEl) return;
+
+  // Client-side recalculation using the same formula
+  var SPOT_FEE = 0.001, FUTURES_FEE = 0.0004, SLIPPAGE = 0.0005;
+  var recalced = _arbData.coins.map(function(c) {
+    var gross = Math.abs(c.basis / 100) * size;
+    var funding = Math.abs(c.fundingRate / 100) * size;
+    var fees = size * SPOT_FEE + size * FUTURES_FEE + size * SLIPPAGE * 2;
+    var net = gross + funding - fees;
+    return { symbol: c.symbol, basis: c.basis, netProfit: parseFloat(net.toFixed(2)), netROI: parseFloat((net / size * 100).toFixed(4)), breakEvenBasis: parseFloat((fees / size * 100).toFixed(4)), profitable: net > 0 };
+  }).filter(function(c) { return c.profitable; }).sort(function(a, b) { return b.netROI - a.netROI; }).slice(0, 5);
+
+  if (recalced.length === 0) {
+    feeEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noFeeProfit') + '</p>';
+  } else {
+    feeEl.innerHTML = '<div style="font-size:0.85em;color:var(--text-dim);margin-bottom:8px">' + t('arb.feeNoteCustom').replace('{size}', fmtUSD(size)) + '</div>' +
+      recalced.map(function(f) {
+      return '<div class="opp-card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<span class="opp-symbol">' + escapeHtml(f.symbol) + '</span>' +
+          '<span class="up" style="font-weight:600">' + t('arb.netROI') + ': ' + fmtPct(f.netROI) + '</span>' +
+        '</div>' +
+        '<div class="opp-detail" style="margin-top:4px">' +
+          t('arb.netProfit') + ': ' + fmtUSD(f.netProfit) + ' | ' +
+          t('arb.basis') + ': ' + fmtPct(f.basis) + ' | ' +
+          t('arb.breakEven') + ': ' + fmtPct(f.breakEvenBasis) +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  showToast(t('arb.feeRecalced'), 'success', 2000);
 }
 
 // ─── i18n ─────────────────────────────────────────────────────────────────
@@ -1393,6 +1669,11 @@ var i18n = {
     'whale.accDist': 'Whale Activity Pattern', 'whale.accumulation': 'Accumulation (Smart Money Buying)',
     'whale.distribution': 'Distribution (Smart Money Selling)', 'whale.adNeutral': 'Neutral (No Clear Pattern)',
     'whale.sentimentScore': 'Sentiment Score', 'whale.th.liqSide': 'Type',
+    'whale.confidence': 'Whale Confidence Score', 'whale.updated': 'Updated:',
+    'whale.factorTrade': 'Trade Flow', 'whale.factorLiq': 'Liquidations', 'whale.factorOB': 'Order Book', 'whale.factorOnchain': 'On-Chain',
+    'whale.confBullish': 'Strong Bullish', 'whale.confSlightBull': 'Slightly Bullish', 'whale.confNeutral': 'Neutral',
+    'whale.confSlightBear': 'Slightly Bearish', 'whale.confBearish': 'Strong Bearish',
+    'whale.viewOnChain': 'View on Blockchain.info', 'whale.autoRefresh': 'Auto-refresh: 30s',
     // Arb page
     'arb.scanner': 'Arbitrage Scanner', 'arb.funding': 'Funding Rates',
     'arb.totalCoins': 'Coins Scanned', 'arb.basisOpps': 'Basis Opportunities', 'arb.volatility': 'High Volatility',
@@ -1409,6 +1690,14 @@ var i18n = {
     'arb.feeNote': 'Based on $10K position. Fees: 0.1% spot + 0.04% futures + 0.05% slippage.',
     'arb.netROI': 'Net ROI', 'arb.netProfit': 'Net Profit', 'arb.breakEven': 'Break-even',
     'arb.openInterest': 'Open Interest', 'arb.loadingTri': 'Loading triangular arb...', 'arb.loadingFee': 'Loading fee analysis...',
+    'arb.updated': 'Updated:', 'arb.autoRefresh': 'Auto-refresh: 30s', 'arb.positionSize': 'Position Size:',
+    'arb.recalc': 'Recalculate', 'arb.invalidSize': 'Invalid position size', 'arb.feeRecalced': 'Fees recalculated',
+    'arb.feeNoteCustom': 'Based on {size} position. Fees: 0.1% spot + 0.04% futures + 0.05% slippage.',
+    'arb.grossProfit': 'Gross Profit', 'arb.fundingIncome': 'Funding Income', 'arb.spotFee': 'Spot Fee',
+    'arb.futuresFee': 'Futures Fee', 'arb.slippage': 'Slippage', 'arb.totalFees': 'Total Fees',
+    'export.success': 'Exported CSV', 'export.noData': 'No data to export',
+    'funding.settling': 'Settling now!', 'funding.nextPayment': 'Next Funding Payment',
+    'funding.countdownNote': 'Funding rates settle every 8 hours', 'funding.updated': 'Updated:',
     // Funding page
     'funding.title': 'Funding Rate Analysis', 'funding.sentimentLabel': 'Market Sentiment',
     'funding.avgRate': 'Avg Rate', 'funding.positive': 'Positive', 'funding.negative': 'Negative',
@@ -1521,6 +1810,11 @@ var i18n = {
     'whale.accDist': '巨鲸行为模式', 'whale.accumulation': '吸筹中 (聪明钱买入)',
     'whale.distribution': '派发中 (聪明钱卖出)', 'whale.adNeutral': '中性 (无明显趋势)',
     'whale.sentimentScore': '情绪评分', 'whale.th.liqSide': '类型',
+    'whale.confidence': '巨鲸信心指数', 'whale.updated': '更新于:',
+    'whale.factorTrade': '交易流向', 'whale.factorLiq': '爆仓', 'whale.factorOB': '订单簿', 'whale.factorOnchain': '链上',
+    'whale.confBullish': '强烈看涨', 'whale.confSlightBull': '略微看涨', 'whale.confNeutral': '中性',
+    'whale.confSlightBear': '略微看跌', 'whale.confBearish': '强烈看跌',
+    'whale.viewOnChain': '在 Blockchain.info 查看', 'whale.autoRefresh': '自动刷新: 30秒',
     // Arb
     'arb.scanner': '套利扫描', 'arb.funding': '资金费率',
     'arb.totalCoins': '扫描币种', 'arb.basisOpps': '基差机会', 'arb.volatility': '高波动',
@@ -1537,6 +1831,14 @@ var i18n = {
     'arb.feeNote': '基于$10K仓位。手续费: 现货0.1% + 合约0.04% + 滑点0.05%',
     'arb.netROI': '净ROI', 'arb.netProfit': '净利润', 'arb.breakEven': '盈亏平衡',
     'arb.openInterest': '持仓量', 'arb.loadingTri': '加载三角套利...', 'arb.loadingFee': '加载费用分析...',
+    'arb.updated': '更新于:', 'arb.autoRefresh': '自动刷新: 30秒', 'arb.positionSize': '仓位大小:',
+    'arb.recalc': '重新计算', 'arb.invalidSize': '无效仓位大小', 'arb.feeRecalced': '费用已重新计算',
+    'arb.feeNoteCustom': '基于 {size} 仓位。手续费: 现货0.1% + 合约0.04% + 滑点0.05%',
+    'arb.grossProfit': '毛利润', 'arb.fundingIncome': '资金费收入', 'arb.spotFee': '现货手续费',
+    'arb.futuresFee': '合约手续费', 'arb.slippage': '滑点', 'arb.totalFees': '总费用',
+    'export.success': '已导出CSV', 'export.noData': '无数据可导出',
+    'funding.settling': '正在结算!', 'funding.nextPayment': '下次资金费结算',
+    'funding.countdownNote': '资金费率每8小时结算一次', 'funding.updated': '更新于:',
     // Funding
     'funding.title': '资金费率分析', 'funding.sentimentLabel': '市场情绪',
     'funding.avgRate': '平均费率', 'funding.positive': '正费率', 'funding.negative': '负费率',
@@ -1764,6 +2066,11 @@ document.addEventListener('click', function(e) {
       'showArbTab': showArbTab,
       'showFundingTab': showFundingTab,
       'sendChat': sendChat,
+      'exportWhaleCSV': exportWhaleCSV,
+      'exportWhaleTrades': exportWhaleTrades,
+      'exportArbCSV': exportArbCSV,
+      'exportArbCoins': exportArbCoins,
+      'recalcFees': recalcFees,
       'mobileToggle': function() { document.querySelector('.sidebar').classList.toggle('open'); },
       'langEn': function() { setLang('en'); },
       'langZh': function() { setLang('zh'); },
@@ -1787,6 +2094,14 @@ document.addEventListener('click', function(e) {
   // Dynamic: remove alert
   var rmAlert = e.target.closest('[data-remove-alert]');
   if (rmAlert) { removeAlert(parseInt(rmAlert.dataset.removeAlert)); return; }
+
+  // Expandable opp cards
+  var expandCard = e.target.closest('.opp-card.expandable');
+  if (expandCard) { expandCard.classList.toggle('expanded'); return; }
+
+  // Sortable table headers
+  var sortTh = e.target.closest('th.sortable');
+  if (sortTh) { handleSortClick(e); return; }
 });
 
 // Nav item keyboard support (Enter/Space)
@@ -1830,8 +2145,17 @@ if (savedLang) {
   setLang('zh');
 }
 
-// Auto-refresh every 30 seconds
+// Auto-refresh every 30 seconds for all data pages
 setInterval(function() {
   var activePage = document.querySelector('.page.active');
-  if (activePage && activePage.id === 'page-dashboard') loadDashboard();
+  if (!activePage) return;
+  var id = activePage.id;
+  if (id === 'page-dashboard') loadDashboard();
+  else if (id === 'page-whale') loadWhaleData();
+  else if (id === 'page-arb') {
+    var scannerTab = document.getElementById('arb-scanner-tab');
+    if (scannerTab && scannerTab.style.display !== 'none') loadArbitrageData();
+    else loadFundingRateData();
+  }
+  else if (id === 'page-bsc') loadBSCData();
 }, 30000);
