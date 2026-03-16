@@ -513,5 +513,209 @@ if (fs.existsSync(configDir)) {
   });
 }
 
+// ---- Whale & Arbitrage Module Tests ----
+console.log('\n📋 Whale & Arbitrage Modules');
+
+test('routes-whale-arb exports all handlers', () => {
+  const whaleArb = require('./routes-whale-arb');
+  assert.strictEqual(typeof whaleArb.handleWhaleAlert, 'function');
+  assert.strictEqual(typeof whaleArb.handleArbitrage, 'function');
+  assert.strictEqual(typeof whaleArb.handleFundingRate, 'function');
+});
+
+test('calculateRiskReward returns valid structure', () => {
+  const { calculateRiskReward } = require('./routes-whale-arb');
+  var result = calculateRiskReward(0.15, 0.02, 5.5);
+  assert.ok(result.risk >= 1 && result.risk <= 5, 'Risk should be 1-5');
+  assert.strictEqual(typeof result.reward, 'number');
+  assert.strictEqual(typeof result.ratio, 'number');
+  assert.ok(['A', 'B', 'C', 'D'].indexOf(result.grade) >= 0, 'Grade should be A-D');
+});
+
+test('calculateRiskReward handles high volatility', () => {
+  const { calculateRiskReward } = require('./routes-whale-arb');
+  var lowVol = calculateRiskReward(0.1, 0.01, 2);
+  var highVol = calculateRiskReward(0.1, 0.01, 10);
+  assert.ok(highVol.risk > lowVol.risk, 'High volatility should increase risk');
+});
+
+test('generateStrategy produces basis strategies', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: 0.2, fundingRate: 0.01, fundingAPY: 15, dayRange: 5 };
+  var strategies = generateStrategy(coin);
+  assert.ok(strategies.length > 0, 'Should generate at least one strategy');
+  var basisStrat = strategies.find(function(s) { return s.type === 'basis'; });
+  assert.ok(basisStrat, 'Should have a basis strategy');
+  assert.strictEqual(basisStrat.name, 'Cash & Carry');
+});
+
+test('generateStrategy produces reverse basis for discount', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: -0.2, fundingRate: 0.01, fundingAPY: 15, dayRange: 2 };
+  var strategies = generateStrategy(coin);
+  var basisStrat = strategies.find(function(s) { return s.type === 'basis'; });
+  assert.ok(basisStrat, 'Should have a basis strategy for discount');
+  assert.strictEqual(basisStrat.name, 'Reverse Cash & Carry');
+});
+
+test('generateStrategy produces funding rate strategy', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: 0.01, fundingRate: 0.02, fundingAPY: 25, dayRange: 2 };
+  var strategies = generateStrategy(coin);
+  var fundStrat = strategies.find(function(s) { return s.type === 'funding'; });
+  assert.ok(fundStrat, 'Should have a funding strategy');
+  assert.strictEqual(fundStrat.name, 'Funding Rate Harvest');
+});
+
+test('generateStrategy produces volatility strategy for high range', () => {
+  const { generateStrategy } = require('./routes-whale-arb');
+  var coin = { basis: 0.01, fundingRate: 0.001, fundingAPY: 1, dayRange: 6 };
+  var strategies = generateStrategy(coin);
+  var volStrat = strategies.find(function(s) { return s.type === 'volatility'; });
+  assert.ok(volStrat, 'Should have a volatility strategy');
+  assert.strictEqual(volStrat.name, 'Range Trading');
+});
+
+test('calculateFeeAdjustedPnL returns valid structure', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.5, 0.02, 10000);
+  assert.strictEqual(result.positionSize, 10000);
+  assert.strictEqual(typeof result.grossProfit, 'number');
+  assert.strictEqual(typeof result.fees.spot, 'number');
+  assert.strictEqual(typeof result.fees.futures, 'number');
+  assert.strictEqual(typeof result.fees.slippage, 'number');
+  assert.strictEqual(typeof result.fees.total, 'number');
+  assert.strictEqual(typeof result.netProfit, 'number');
+  assert.strictEqual(typeof result.netROI, 'number');
+  assert.strictEqual(typeof result.profitable, 'boolean');
+  assert.strictEqual(typeof result.breakEvenBasis, 'number');
+});
+
+test('calculateFeeAdjustedPnL detects unprofitable small basis', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.01, 0.001, 10000);
+  assert.strictEqual(result.profitable, false, 'Tiny basis should not be profitable after fees');
+});
+
+test('calculateFeeAdjustedPnL detects profitable large basis', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(1.0, 0.05, 10000);
+  assert.strictEqual(result.profitable, true, 'Large basis should be profitable after fees');
+  assert.ok(result.netProfit > 0, 'Net profit should be positive');
+});
+
+test('calculateFeeAdjustedPnL defaults to $10K position', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.5, 0.02);
+  assert.strictEqual(result.positionSize, 10000);
+});
+
+test('calculateFeeAdjustedPnL fee breakdown is correct', () => {
+  const { calculateFeeAdjustedPnL } = require('./routes-whale-arb');
+  var result = calculateFeeAdjustedPnL(0.5, 0.02, 10000);
+  assert.strictEqual(result.fees.spot, 10); // 0.1% of 10K
+  assert.strictEqual(result.fees.futures, 4); // 0.04% of 10K
+  assert.strictEqual(result.fees.slippage, 10); // 0.05% * 2 * 10K
+  assert.strictEqual(result.fees.total, 24); // 10+4+10
+});
+
+test('calculateRiskReward grade boundaries', () => {
+  const { calculateRiskReward } = require('./routes-whale-arb');
+  // Grade A: ratio > 10
+  var gradeA = calculateRiskReward(0.5, 0.1, 2);
+  // Grade D: ratio <= 2 (needs very small reward)
+  var gradeD = calculateRiskReward(0.001, 0.0001, 9);
+  assert.ok(['A', 'B'].indexOf(gradeA.grade) >= 0, 'High reward should get A or B grade');
+  assert.strictEqual(gradeD.grade, 'D', 'Low reward + high risk should get D grade');
+});
+
+// ---- New Feature Tests: AI Chat whale/arb intents ----
+console.log('\n📋 AI Chat Whale/Arb Integration');
+
+test('detectIntents recognizes whale intent', () => {
+  const { detectIntents } = require('./routes-ai-chat');
+  assert.ok(detectIntents('巨鲸在买还是卖').includes('whale'), 'Should detect whale intent for Chinese');
+  assert.ok(detectIntents('what are whales doing').includes('whale'), 'Should detect whale intent for English');
+  assert.ok(detectIntents('smart money flow').includes('whale'), 'Should detect whale intent for smart money');
+});
+
+test('detectIntents recognizes arbitrage intent', () => {
+  const { detectIntents } = require('./routes-ai-chat');
+  assert.ok(detectIntents('有什么套利机会').includes('arbitrage'), 'Should detect arb intent for Chinese');
+  assert.ok(detectIntents('funding rate analysis').includes('arbitrage'), 'Should detect arb intent for funding');
+  assert.ok(detectIntents('cash carry strategy').includes('arbitrage'), 'Should detect arb intent for cash carry');
+});
+
+test('detectIntents recognizes liquidation intent', () => {
+  const { detectIntents } = require('./routes-ai-chat');
+  assert.ok(detectIntents('最近爆仓情况').includes('liquidation'), 'Should detect liq intent for Chinese');
+  assert.ok(detectIntents('who got liquidated').includes('liquidation'), 'Should detect liq intent for English');
+});
+
+// ---- Arb History Tests ----
+console.log('\n📋 Arb History Tracker');
+
+test('recordArbSnapshot and handleArbHistory work', () => {
+  const { recordArbSnapshot, handleArbHistory } = require('./routes-whale-arb');
+  assert.strictEqual(typeof recordArbSnapshot, 'function');
+  assert.strictEqual(typeof handleArbHistory, 'function');
+});
+
+test('recordArbSnapshot stores snapshot correctly', () => {
+  const { recordArbSnapshot } = require('./routes-whale-arb');
+  var mockData = {
+    coins: [{ symbol: 'BTC', basis: 0.05, fundingRate: 0.01, fundingTrend: 'stable' }],
+    marketSummary: {
+      avgBasis: 0.05, avgFundingRate: 0.01,
+      basisOppsCount: 2, fundingOppsCount: 3,
+      profitableAfterFeesCount: 1, totalOpenInterest: 500000000,
+    },
+  };
+  // Should not throw
+  recordArbSnapshot(mockData);
+  recordArbSnapshot(null); // Should handle null gracefully
+});
+
+test('SSE module exports whaleAlertTimer', () => {
+  const sse = require('./sse');
+  assert.ok(sse.whaleAlertTimer, 'Should export whaleAlertTimer');
+});
+
+// ---- Position Advice Tests ----
+console.log('\n📋 Position Advice');
+
+test('calculatePositionAdvice returns valid structure', () => {
+  const { calculatePositionAdvice } = require('./routes-whale-arb');
+  var coin = {
+    basis: 0.15, fundingRate: 0.02, spotPrice: 60000, futuresPrice: 60090,
+    dayRange: 5, riskReward: { grade: 'B', ratio: 8 },
+    feeAnalysis: { netROI: 0.05, profitable: true },
+  };
+  var advice = calculatePositionAdvice(coin, 100000);
+  assert.ok(advice.recommendedPosition > 0, 'Should recommend a position size');
+  assert.ok(advice.percentOfAccount > 0 && advice.percentOfAccount <= 100, 'Percent should be 0-100');
+  assert.ok(advice.hedge.spotAction === 'BUY', 'Positive basis = buy spot');
+  assert.ok(advice.hedge.futuresAction === 'SHORT', 'Positive basis = short futures');
+  assert.ok(advice.hedge.leverage >= 2 && advice.hedge.leverage <= 10, 'Leverage should be reasonable');
+  assert.ok(advice.hedge.liquidationPrice > 0, 'Liq price should be positive');
+  assert.ok(['HIGH', 'MEDIUM', 'LOW'].indexOf(advice.riskLevel) >= 0, 'Risk level should be valid');
+});
+
+test('calculatePositionAdvice scales by grade', () => {
+  const { calculatePositionAdvice } = require('./routes-whale-arb');
+  var coinA = { basis: 0.15, fundingRate: 0.02, spotPrice: 60000, futuresPrice: 60090, dayRange: 3, riskReward: { grade: 'A' } };
+  var coinD = { basis: 0.15, fundingRate: 0.02, spotPrice: 60000, futuresPrice: 60090, dayRange: 3, riskReward: { grade: 'D' } };
+  var adviceA = calculatePositionAdvice(coinA, 100000);
+  var adviceD = calculatePositionAdvice(coinD, 100000);
+  assert.ok(adviceA.recommendedPosition > adviceD.recommendedPosition, 'Grade A should get larger position than D');
+});
+
+test('calculatePositionAdvice uses default account size', () => {
+  const { calculatePositionAdvice } = require('./routes-whale-arb');
+  var coin = { basis: 0.1, fundingRate: 0.01, spotPrice: 3000, futuresPrice: 3003, dayRange: 4, riskReward: { grade: 'C' } };
+  var advice = calculatePositionAdvice(coin);
+  assert.strictEqual(advice.accountSize, 100000, 'Default account should be $100K');
+});
+
 // ---- Run All & Report ----
 runAll();

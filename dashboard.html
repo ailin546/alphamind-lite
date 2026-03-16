@@ -536,6 +536,56 @@
     .sentiment-badge.bullish { background:rgba(0,230,118,0.15); color:var(--up) }
     .sentiment-badge.bearish { background:rgba(255,82,82,0.15); color:var(--down) }
     .sentiment-badge.neutral { background:rgba(138,143,152,0.15); color:var(--text-dim) }
+    /* Liquidation mega tier */
+    .whale-badge.mega { background:rgba(255,0,68,0.3); color:#ff0044; animation:pulse-mega 2s infinite }
+    .whale-badge.fish { background:rgba(138,143,152,0.15); color:var(--text-dim) }
+    @keyframes pulse-mega { 0%,100% { opacity:1 } 50% { opacity:0.7 } }
+    /* Sortable table headers */
+    .market-table th.sortable { cursor:pointer; user-select:none; position:relative; padding-right:18px }
+    .market-table th.sortable:hover { color:var(--primary) }
+    .market-table th.sortable::after { content:'⇅'; position:absolute; right:4px; opacity:0.3; font-size:0.8em }
+    .market-table th.sortable.sort-asc::after { content:'↑'; opacity:1; color:var(--primary) }
+    .market-table th.sortable.sort-desc::after { content:'↓'; opacity:1; color:var(--primary) }
+    /* Expandable strategy cards */
+    .opp-card.expandable { cursor:pointer; transition:background 0.2s }
+    .opp-card.expandable:hover { background:var(--bg-hover) }
+    .opp-card .strategy-details { max-height:0; overflow:hidden; transition:max-height 0.3s ease; margin-top:0 }
+    .opp-card.expanded .strategy-details { max-height:300px; margin-top:8px }
+    .opp-card .expand-icon { transition:transform 0.3s; display:inline-block; font-size:0.8em; margin-left:8px }
+    .opp-card.expanded .expand-icon { transform:rotate(180deg) }
+    /* Confidence meter */
+    .confidence-meter { display:flex; align-items:center; gap:12px; margin-top:8px }
+    .confidence-bar { flex:1; height:12px; background:var(--bg); border-radius:6px; overflow:hidden; position:relative }
+    .confidence-fill { height:100%; border-radius:6px; transition:width 0.8s ease }
+    .confidence-label { font-weight:700; font-size:1.3em; min-width:48px; text-align:center }
+    /* Sparkline */
+    .sparkline { display:inline-block; vertical-align:middle }
+    .sparkline-bar { display:inline-block; width:3px; margin:0 1px; border-radius:1px; vertical-align:bottom; transition:height 0.3s }
+    /* Countdown */
+    .countdown { font-family:monospace; font-weight:600; color:var(--warning); font-size:0.9em }
+    /* Data freshness */
+    .data-freshness { text-align:center; font-size:0.8em; color:var(--text-dim); padding:8px 0; display:flex; align-items:center; justify-content:center; gap:8px }
+    .freshness-dot { width:8px; height:8px; border-radius:50%; background:var(--up); display:inline-block; animation:blink 2s infinite }
+    @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+    /* Whale live feed */
+    .whale-live-feed { max-height:180px; overflow-y:auto; font-size:0.85em }
+    .whale-feed-item { padding:4px 8px; border-bottom:1px solid var(--border); animation:feedSlideIn 0.3s ease-out }
+    .whale-feed-item.mega-alert { background:rgba(255,64,129,0.1); border-left:3px solid var(--accent) }
+    .feed-time { color:var(--text-dim); font-family:monospace; font-size:0.85em; margin-right:6px }
+    @keyframes feedSlideIn { from { opacity:0; transform:translateY(-8px) } to { opacity:1; transform:translateY(0) } }
+    /* Export button */
+    .btn-export { background:transparent; border:1px solid var(--border); color:var(--text-dim); padding:4px 12px; border-radius:6px; cursor:pointer; font-size:0.8em; transition:all 0.2s }
+    .btn-export:hover { border-color:var(--primary); color:var(--primary) }
+    /* Position size input */
+    .position-input { display:flex; align-items:center; gap:8px; margin-bottom:12px; padding:8px 12px; background:var(--bg); border-radius:8px }
+    .position-input input { background:var(--bg-card); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; width:120px; font-size:0.9em }
+    .position-input input:focus { border-color:var(--primary); outline:none }
+    /* Mobile table scroll hint */
+    @media (max-width: 768px) {
+      .table-scroll-wrapper { position:relative }
+      .table-scroll-wrapper::after { content:'→ scroll'; position:absolute; right:8px; top:8px; font-size:0.7em; color:var(--text-dim); opacity:0.6 }
+      .market-table { min-width:600px }
+    }
   </style>
 </head>
 <body>
@@ -1020,10 +1070,18 @@ Ask me anything about cryptocurrency markets, for example:
         <div class="header">
           <h2 data-i18n="h.whale">Whale Tracking</h2>
           <div class="header-actions">
+            <button class="btn-export" data-action="exportWhaleCSV" title="Export CSV">CSV ↓</button>
             <button class="btn" data-action="loadWhaleData" data-i18n="btn.refresh">Refresh</button>
           </div>
         </div>
         <div id="whale-content">
+          <!-- Live Alert Feed -->
+          <div class="card" style="margin-bottom:16px">
+            <h3 style="margin-bottom:8px" data-i18n="whale.liveFeed">Live Alert Feed</h3>
+            <div id="whale-live-feed" class="whale-live-feed">
+              <div class="whale-feed-item" style="color:var(--text-dim)" data-i18n="whale.waitingAlerts">Listening for whale activity...</div>
+            </div>
+          </div>
           <!-- Summary Stats -->
           <div class="grid-4">
             <div class="stat-card">
@@ -1045,6 +1103,21 @@ Ask me anything about cryptocurrency markets, for example:
             </div>
           </div>
 
+          <!-- Whale Confidence Score -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title" data-i18n="whale.confidence">Whale Confidence Score</div>
+            <div id="whale-confidence">
+              <div class="confidence-meter">
+                <div class="confidence-label" id="whale-confidence-value">--</div>
+                <div class="confidence-bar">
+                  <div class="confidence-fill" id="whale-confidence-fill" style="width:50%;background:var(--text-dim)"></div>
+                </div>
+                <div id="whale-confidence-label" style="font-size:0.85em;color:var(--text-dim)">--</div>
+              </div>
+              <div id="whale-confidence-factors" style="margin-top:8px;font-size:0.8em;color:var(--text-dim)"></div>
+            </div>
+          </div>
+
           <!-- Buy/Sell Pressure Bar -->
           <div class="card" style="margin-top:16px">
             <div class="card-title" data-i18n="whale.pressure">Buy / Sell Pressure</div>
@@ -1058,16 +1131,20 @@ Ask me anything about cryptocurrency markets, for example:
 
           <!-- Large Trades Table -->
           <div class="card" style="margin-top:16px">
-            <div class="card-title" data-i18n="whale.largeTrades">Large Trades (Binance)</div>
-            <div style="overflow-x:auto">
-              <table class="market-table">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="card-title" data-i18n="whale.largeTrades">Large Trades (Binance)</div>
+              <button class="btn-export" data-action="exportWhaleTrades" title="Export trades">CSV ↓</button>
+            </div>
+            <div class="table-scroll-wrapper" style="overflow-x:auto">
+              <table class="market-table" id="whale-trades-table">
                 <thead>
                   <tr>
-                    <th data-i18n="whale.th.time">Time</th>
-                    <th data-i18n="whale.th.side">Side</th>
-                    <th data-i18n="whale.th.price">Price</th>
-                    <th data-i18n="whale.th.quantity">Quantity</th>
-                    <th data-i18n="whale.th.usdValue">USD Value</th>
+                    <th class="sortable" data-sort="time" data-i18n="whale.th.time">Time</th>
+                    <th class="sortable" data-sort="symbol" data-i18n="whale.th.symbol">Symbol</th>
+                    <th class="sortable" data-sort="side" data-i18n="whale.th.side">Side</th>
+                    <th class="sortable" data-sort="price" data-i18n="whale.th.price">Price</th>
+                    <th class="sortable" data-sort="qty" data-i18n="whale.th.quantity">Quantity</th>
+                    <th class="sortable sort-desc" data-sort="usd" data-i18n="whale.th.usdValue">USD Value</th>
                   </tr>
                 </thead>
                 <tbody id="whale-trades-body">
@@ -1103,6 +1180,66 @@ Ask me anything about cryptocurrency markets, for example:
             </div>
           </div>
 
+          <!-- Liquidations Section -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title" data-i18n="whale.liquidations">Recent Liquidations (BTC + ETH)</div>
+            <div id="whale-liq-summary" style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+              <span style="color:var(--text-dim)" data-i18n="whale.longLiq">Long Liq:</span> <strong id="whale-long-liq-vol" class="down">--</strong>
+              <span style="color:var(--text-dim)" data-i18n="whale.shortLiq">Short Liq:</span> <strong id="whale-short-liq-vol" class="up">--</strong>
+              <span style="color:var(--text-dim)" data-i18n="whale.liqCount">Count:</span> <strong id="whale-liq-count">--</strong>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="market-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="whale.th.time">Time</th>
+                    <th data-i18n="whale.th.symbol">Symbol</th>
+                    <th data-i18n="whale.th.liqSide">Side</th>
+                    <th data-i18n="whale.th.price">Price</th>
+                    <th data-i18n="whale.th.quantity">Quantity</th>
+                    <th data-i18n="whale.th.usdValue">USD Value</th>
+                  </tr>
+                </thead>
+                <tbody id="whale-liq-body">
+                  <tr><td colspan="6" class="loading"><div class="spinner"></div> <span data-i18n="whale.loadingLiq">Loading liquidation data...</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Order Book Depth -->
+          <div class="card" style="margin-top:16px">
+            <div class="card-title" data-i18n="whale.orderBook">Order Book Depth</div>
+            <div id="whale-orderbook" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div>
+                <h4 style="color:var(--text-dim);margin-bottom:8px">BTC</h4>
+                <div id="whale-ob-btc">
+                  <div class="loading"><div class="spinner"></div></div>
+                </div>
+              </div>
+              <div>
+                <h4 style="color:var(--text-dim);margin-bottom:8px">ETH</h4>
+                <div id="whale-ob-eth">
+                  <div class="loading"><div class="spinner"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Accumulation/Distribution -->
+          <div class="card" style="margin-top:16px; padding:12px 16px">
+            <div class="card-title" data-i18n="whale.accDist" style="margin-bottom:8px">Whale Activity Pattern</div>
+            <div id="whale-acc-dist" style="font-size:1.1em;font-weight:600">--</div>
+          </div>
+
+          <!-- Smart Signals (whale x arb correlation) -->
+          <div class="card" style="margin-top:16px; padding:12px 16px">
+            <div class="card-title" data-i18n="whale.smartSignals" style="margin-bottom:8px">Smart Signals</div>
+            <div id="whale-smart-signals" style="font-size:0.9em">
+              <span style="color:var(--text-dim)" data-i18n="whale.noSignals">No cross-module signals detected</span>
+            </div>
+          </div>
+
           <!-- Legend -->
           <div class="card" style="margin-top:16px; padding:12px 16px">
             <div class="card-title" data-i18n="whale.legend" style="margin-bottom:8px">Size Legend</div>
@@ -1112,6 +1249,14 @@ Ask me anything about cryptocurrency markets, for example:
               <span class="legend-item"><span class="whale-badge dolphin">Dolphin</span> <span data-i18n="whale.legendDolphin">&ge; 100 BTC</span></span>
             </div>
           </div>
+
+          <!-- Data Freshness -->
+          <div class="data-freshness" id="whale-freshness">
+            <span class="freshness-dot"></span>
+            <span id="whale-update-time">--</span>
+            <span style="color:var(--text-dim)">|</span>
+            <span data-i18n="whale.autoRefresh">Auto-refresh: 30s</span>
+          </div>
         </div>
       </div>
 
@@ -1120,6 +1265,7 @@ Ask me anything about cryptocurrency markets, for example:
         <div class="header">
           <h2 data-i18n="h.arb">Arbitrage Scanner</h2>
           <div class="header-actions">
+            <button class="btn-export" data-action="exportArbCSV" title="Export CSV">CSV ↓</button>
             <button class="btn" data-action="loadArbitrageData" data-i18n="btn.refresh">Refresh</button>
           </div>
         </div>
@@ -1166,30 +1312,98 @@ Ask me anything about cryptocurrency markets, for example:
 
             <!-- All Coins Table -->
             <div class="card" style="margin-top:16px">
-              <div class="card-title" data-i18n="arb.allCoins">All Coins Spread Analysis</div>
-              <div style="overflow-x:auto">
-                <table class="market-table">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div class="card-title" data-i18n="arb.allCoins">All Coins Spread Analysis</div>
+                <button class="btn-export" data-action="exportArbCoins" title="Export coins">CSV ↓</button>
+              </div>
+              <div class="table-scroll-wrapper" style="overflow-x:auto">
+                <table class="market-table" id="arb-coins-table">
                   <thead>
                     <tr>
-                      <th data-i18n="arb.th.symbol">Symbol</th>
-                      <th data-i18n="arb.th.spotPrice">Spot Price</th>
-                      <th data-i18n="arb.th.futuresPrice">Futures Price</th>
-                      <th data-i18n="arb.th.basis">Basis (%)</th>
-                      <th data-i18n="arb.th.fundingRate">Funding Rate</th>
-                      <th data-i18n="arb.th.fundingApy">APY</th>
-                      <th data-i18n="arb.th.dayRange">24h Range</th>
-                      <th data-i18n="arb.th.volume">Volume</th>
+                      <th class="sortable" data-sort="symbol" data-i18n="arb.th.symbol">Symbol</th>
+                      <th class="sortable" data-sort="spotPrice" data-i18n="arb.th.spotPrice">Spot Price</th>
+                      <th class="sortable" data-sort="futuresPrice" data-i18n="arb.th.futuresPrice">Futures Price</th>
+                      <th class="sortable sort-desc" data-sort="basis" data-i18n="arb.th.basis">Basis (%)</th>
+                      <th class="sortable" data-sort="fundingRate" data-i18n="arb.th.fundingRate">Funding Rate</th>
+                      <th class="sortable" data-sort="fundingAPY" data-i18n="arb.th.fundingApy">APY</th>
+                      <th class="sortable" data-sort="dayRange" data-i18n="arb.th.dayRange">24h Range</th>
+                      <th class="sortable" data-sort="openInterestUSD" data-i18n="arb.th.openInterest">Open Interest</th>
+                      <th class="sortable" data-sort="volume" data-i18n="arb.th.volume">Volume</th>
                     </tr>
                   </thead>
                   <tbody id="arb-coins-body">
-                    <tr><td colspan="8" class="loading"><div class="spinner"></div> <span data-i18n="arb.loading">Loading arbitrage data...</span></td></tr>
+                    <tr><td colspan="9" class="loading"><div class="spinner"></div> <span data-i18n="arb.loading">Loading arbitrage data...</span></td></tr>
                   </tbody>
                 </table>
               </div>
             </div>
 
-            <!-- Timestamp -->
-            <div style="margin-top:12px; text-align:center; font-size:0.85em; color:var(--text-dim)" id="arb-timestamp"></div>
+            <!-- Triangular Arbitrage -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="arb.triangular">Triangular Arbitrage</div>
+              <div id="arb-tri-opps">
+                <div class="loading"><div class="spinner"></div> <span data-i18n="arb.loadingTri">Loading triangular arb...</span></div>
+              </div>
+            </div>
+
+            <!-- Fee-Adjusted Profitable -->
+            <div class="card" style="margin-top:16px">
+              <div class="card-title" data-i18n="arb.feeAdjusted">Fee-Adjusted Profitable Opportunities</div>
+              <div class="position-input">
+                <label data-i18n="arb.positionSize" style="color:var(--text-dim);font-size:0.85em">Position Size:</label>
+                <input type="number" id="arb-position-size" value="10000" min="100" max="1000000" step="1000" placeholder="$10,000">
+                <span style="color:var(--text-dim);font-size:0.85em">USDT</span>
+                <button class="btn" style="padding:4px 12px;font-size:0.85em" data-action="recalcFees" data-i18n="arb.recalc">Recalculate</button>
+              </div>
+              <div id="arb-fee-adjusted">
+                <div class="loading"><div class="spinner"></div> <span data-i18n="arb.loadingFee">Loading fee analysis...</span></div>
+              </div>
+            </div>
+
+            <!-- Arb History Chart -->
+            <div class="card" style="margin-top:16px">
+              <h3 data-i18n="arb.historyTitle">Basis Trend (Historical)</h3>
+              <div style="height:200px;position:relative;margin-top:8px">
+                <canvas id="chart-arb-history"></canvas>
+              </div>
+              <div style="text-align:center;font-size:0.8em;color:var(--text-dim);margin-top:4px" data-i18n="arb.historyNote">Records every fetch cycle. Resets on server restart.</div>
+            </div>
+
+            <!-- Quick Comparison Tool -->
+            <div class="card" style="margin-top:16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <h3 data-i18n="arb.compareTitle">Quick Compare</h3>
+                <button class="btn-export" data-action="clearComparison" data-i18n="arb.clearCompare">Clear</button>
+              </div>
+              <div style="font-size:0.8em;color:var(--text-dim);margin-bottom:8px" data-i18n="arb.compareHint">Click + on any coin row to add to comparison</div>
+              <div style="overflow-x:auto">
+                <table class="market-table" id="arb-compare-table">
+                  <thead>
+                    <tr>
+                      <th data-i18n="arb.th.symbol">Symbol</th>
+                      <th data-i18n="arb.basis">Basis</th>
+                      <th data-i18n="arb.fundingRate">Funding</th>
+                      <th data-i18n="arb.grade">Grade</th>
+                      <th data-i18n="arb.totalFees">Fees</th>
+                      <th data-i18n="arb.netROI">Net ROI</th>
+                      <th data-i18n="arb.monthlyROI">Monthly</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="arb-compare-body">
+                    <tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px" data-i18n="arb.compareEmpty">No coins added yet</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Data Freshness -->
+            <div class="data-freshness" id="arb-freshness">
+              <span class="freshness-dot"></span>
+              <span id="arb-update-time">--</span>
+              <span style="color:var(--text-dim)">|</span>
+              <span data-i18n="arb.autoRefresh">Auto-refresh: 30s</span>
+            </div>
           </div>
 
           <!-- Funding Rates Tab (hidden by default) -->
@@ -1246,8 +1460,18 @@ Ask me anything about cryptocurrency markets, for example:
               </div>
             </div>
 
-            <!-- Timestamp -->
-            <div style="margin-top:12px; text-align:center; font-size:0.85em; color:var(--text-dim)" id="funding-timestamp"></div>
+            <!-- Next Funding Countdown -->
+            <div class="card" style="margin-top:16px;text-align:center;padding:16px">
+              <div class="card-title" data-i18n="funding.nextPayment">Next Funding Payment</div>
+              <div class="countdown" id="funding-countdown" style="font-size:1.5em;margin-top:8px">--:--:--</div>
+              <div style="font-size:0.85em;color:var(--text-dim);margin-top:4px" data-i18n="funding.countdownNote">Funding rates settle every 8 hours</div>
+            </div>
+
+            <!-- Data Freshness -->
+            <div class="data-freshness" id="funding-freshness">
+              <span class="freshness-dot"></span>
+              <span id="funding-update-time">--</span>
+            </div>
           </div>
         </div>
       </div>

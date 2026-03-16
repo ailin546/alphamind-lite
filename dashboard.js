@@ -904,7 +904,49 @@ function connectSSE() {
       });
     } catch (ex) { /* ignore */ }
   });
+  // Whale alert real-time notifications
+  sseSource.addEventListener('whale_alert', function(e) {
+    try {
+      var whaleAlerts = JSON.parse(e.data);
+      var zh = (document.documentElement.lang === 'zh' || (window._i18nLang === 'zh'));
+      whaleAlerts.forEach(function(wa) {
+        var usdStr = wa.usd >= 1000000 ? '$' + (wa.usd / 1e6).toFixed(1) + 'M' : '$' + (wa.usd / 1e3).toFixed(0) + 'K';
+        var msg;
+        if (wa.type === 'liquidation') {
+          msg = zh
+            ? '💥 ' + wa.symbol + ' ' + (wa.side === 'long_liq' ? '多单爆仓' : '空单爆仓') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥巨额!' : '')
+            : '💥 ' + wa.symbol + ' ' + (wa.side === 'long_liq' ? 'Long Liquidated' : 'Short Liquidated') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥MEGA!' : '');
+        } else {
+          msg = zh
+            ? '🐋 ' + wa.symbol + ' ' + (wa.side === 'buy' ? '大额买入' : '大额卖出') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥巨鲸!' : wa.tier === 'large' ? ' 🦈' : '')
+            : '🐋 ' + wa.symbol + ' ' + (wa.side === 'buy' ? 'Large BUY' : 'Large SELL') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥WHALE!' : wa.tier === 'large' ? ' 🦈' : '');
+        }
+        showToast(msg, wa.side === 'buy' ? 'success' : 'warning', wa.tier === 'mega' ? 15000 : 8000);
+        // Browser notification for mega events
+        if (wa.tier === 'mega' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('AlphaMind Whale Alert', { body: msg, icon: '/favicon.ico' });
+        }
+        // Append to whale alert feed if on whale page
+        appendWhaleAlertToFeed(wa, msg);
+      });
+    } catch (ex) { /* ignore */ }
+  });
   sseSource.onerror = function() { setTimeout(connectSSE, 5000); };
+}
+
+// Live whale alert feed on whale page
+var _whaleAlertFeed = [];
+function appendWhaleAlertToFeed(wa, msg) {
+  _whaleAlertFeed.unshift({ alert: wa, msg: msg, time: new Date() });
+  if (_whaleAlertFeed.length > 50) _whaleAlertFeed = _whaleAlertFeed.slice(0, 50);
+  var feedEl = document.getElementById('whale-live-feed');
+  if (!feedEl) return;
+  var item = document.createElement('div');
+  item.className = 'whale-feed-item' + (wa.tier === 'mega' ? ' mega-alert' : '');
+  item.innerHTML = '<span class="feed-time">' + new Date().toLocaleTimeString() + '</span> ' + escapeHtml(msg);
+  feedEl.insertBefore(item, feedEl.firstChild);
+  // Limit visible items
+  while (feedEl.children.length > 20) feedEl.removeChild(feedEl.lastChild);
 }
 
 // Request notification permission
@@ -965,6 +1007,7 @@ async function loadWhaleData() {
   if (!content) return;
   try {
     var data = await api('/api/whale');
+    _whaleData = data; // Cache for sorting/export
 
     // Summary stats
     var el;
@@ -995,21 +1038,17 @@ async function loadWhaleData() {
         '</div>';
     }
 
-    // Large trades table
-    var tbody = document.getElementById('whale-trades-body');
-    if (tbody) {
-      if (data.largeTrades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
-      } else {
-        tbody.innerHTML = data.largeTrades.map(function(tr) {
-          return '<tr>' +
-            '<td>' + (tr.time ? new Date(tr.time).toLocaleTimeString() : '--') + '</td>' +
-            '<td><span class="side-badge ' + tr.side + '">' + tr.side.toUpperCase() + '</span></td>' +
-            '<td>' + fmtUSD(tr.price) + '</td>' +
-            '<td>' + fmt(tr.qty, 4) + '</td>' +
-            '<td style="font-weight:600">' + fmtUSD(tr.usd) + '</td>' +
-            '</tr>';
-        }).join('');
+    // Large trades table (using shared render function)
+    renderWhaleTradesTable(data.largeTrades);
+
+    // Update trade count with tier info
+    el = document.getElementById('whale-trade-count');
+    if (el) {
+      el.textContent = data.summary.tradeCount;
+      if (data.summary.tier500k > 0) {
+        el.insertAdjacentHTML('afterend', '<div class="stat-change" style="color:var(--text-dim);font-size:0.7em">' +
+          (data.summary.tier500k > 0 ? '>$500K: ' + data.summary.tier500k : '') +
+          (data.summary.tier100k > 0 ? ' | >$100K: ' + data.summary.tier100k : '') + '</div>');
       }
     }
 
@@ -1026,8 +1065,9 @@ async function loadWhaleData() {
         onchainBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">' + t('whale.noOnchain') + '</td></tr>';
       } else {
         onchainBody.innerHTML = data.onchain.transactions.map(function(tx) {
+          var fullHash = tx.hash.replace('...', '');
           return '<tr>' +
-            '<td style="font-family:monospace;font-size:0.85em">' + escapeHtml(tx.hash) + '</td>' +
+            '<td style="font-family:monospace;font-size:0.85em"><a href="https://blockchain.info/tx/' + escapeHtml(fullHash) + '" target="_blank" rel="noopener" style="color:var(--secondary);text-decoration:none" title="' + t('whale.viewOnChain') + '">' + escapeHtml(tx.hash) + ' ↗</a></td>' +
             '<td style="font-weight:600">' + fmt(tx.btc, 2) + ' BTC</td>' +
             '<td>' + fmtUSD(tx.usd) + '</td>' +
             '<td><span class="whale-badge ' + tx.size + '">' + tx.size + '</span></td>' +
@@ -1036,6 +1076,99 @@ async function loadWhaleData() {
         }).join('');
       }
     }
+
+    // Liquidations section
+    var liqBody = document.getElementById('whale-liq-body');
+    if (liqBody && data.liquidations) {
+      var liqSum = data.liquidations.summary;
+      var longLiqEl = document.getElementById('whale-long-liq-vol');
+      var shortLiqEl = document.getElementById('whale-short-liq-vol');
+      var liqCountEl = document.getElementById('whale-liq-count');
+      if (longLiqEl) longLiqEl.textContent = liqSum.longLiqVolume > 1e6 ? '$' + (liqSum.longLiqVolume / 1e6).toFixed(1) + 'M' : fmtUSD(liqSum.longLiqVolume);
+      if (shortLiqEl) shortLiqEl.textContent = liqSum.shortLiqVolume > 1e6 ? '$' + (liqSum.shortLiqVolume / 1e6).toFixed(1) + 'M' : fmtUSD(liqSum.shortLiqVolume);
+      if (liqCountEl) liqCountEl.textContent = liqSum.totalCount;
+
+      if (data.liquidations.recent.length === 0) {
+        liqBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">' + t('whale.noLiq') + '</td></tr>';
+      } else {
+        liqBody.innerHTML = data.liquidations.recent.map(function(liq) {
+          var sideLabel = liq.side === 'long_liq' ? 'LONG LIQ' : 'SHORT LIQ';
+          var sideClass = liq.side === 'long_liq' ? 'sell' : 'buy';
+          var tierClass = liq.tier === 'mega' ? 'whale' : liq.tier === 'large' ? 'shark' : 'dolphin';
+          return '<tr>' +
+            '<td>' + (liq.time ? new Date(liq.time).toLocaleTimeString() : '--') + '</td>' +
+            '<td style="font-weight:600">' + escapeHtml(liq.symbol) + '</td>' +
+            '<td><span class="side-badge ' + sideClass + '">' + sideLabel + '</span></td>' +
+            '<td>' + fmtUSD(liq.price) + '</td>' +
+            '<td>' + fmt(liq.qty, 4) + '</td>' +
+            '<td style="font-weight:600"><span class="whale-badge ' + tierClass + '">' + fmtUSD(liq.usd) + '</span></td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+
+    // Order Book Depth
+    if (data.orderBook) {
+      ['btc', 'eth'].forEach(function(sym) {
+        var ob = data.orderBook[sym];
+        var el = document.getElementById('whale-ob-' + sym);
+        if (!el || !ob) return;
+        var signalColor = ob.imbalanceSignal.indexOf('buy') >= 0 ? 'var(--up)' : ob.imbalanceSignal.indexOf('sell') >= 0 ? 'var(--down)' : 'var(--text-dim)';
+        var bidPct = ob.bidVolume + ob.askVolume > 0 ? (ob.bidVolume / (ob.bidVolume + ob.askVolume) * 100) : 50;
+        el.innerHTML =
+          '<div style="margin-bottom:8px">' +
+            '<span style="color:var(--text-dim)">' + t('whale.imbalance') + ': </span>' +
+            '<strong style="color:' + signalColor + '">' + ob.imbalance.toFixed(2) + 'x (' + ob.imbalanceSignal.replace(/_/g, ' ') + ')</strong>' +
+          '</div>' +
+          '<div class="pressure-bar" style="margin-bottom:6px">' +
+            '<div class="buy-bar" style="width:' + bidPct.toFixed(1) + '%">' + t('whale.bid') + ' ' + (ob.bidVolume > 1e6 ? '$' + (ob.bidVolume/1e6).toFixed(1) + 'M' : fmtUSD(ob.bidVolume)) + '</div>' +
+            '<div class="sell-bar" style="width:' + (100 - bidPct).toFixed(1) + '%">' + t('whale.ask') + ' ' + (ob.askVolume > 1e6 ? '$' + (ob.askVolume/1e6).toFixed(1) + 'M' : fmtUSD(ob.askVolume)) + '</div>' +
+          '</div>' +
+          '<div style="font-size:0.85em;color:var(--text-dim)">' +
+            t('whale.spread') + ': ' + ob.spread.toFixed(4) + '% | ' +
+            t('whale.bidWalls') + ': ' + ob.bidWalls.length + ' | ' +
+            t('whale.askWalls') + ': ' + ob.askWalls.length +
+          '</div>';
+      });
+    }
+
+    // Accumulation/Distribution
+    var accDistEl = document.getElementById('whale-acc-dist');
+    if (accDistEl && data.summary.accumulationDistribution) {
+      var adMap = {
+        accumulation: { text: t('whale.accumulation'), color: 'var(--up)', icon: '' },
+        distribution: { text: t('whale.distribution'), color: 'var(--down)', icon: '' },
+        neutral: { text: t('whale.adNeutral'), color: 'var(--text-dim)', icon: '' },
+      };
+      var ad = adMap[data.summary.accumulationDistribution] || adMap.neutral;
+      accDistEl.innerHTML = '<span style="color:' + ad.color + '">' + ad.icon + ' ' + ad.text + '</span>' +
+        '<span style="font-size:0.85em;color:var(--text-dim);margin-left:12px">' +
+          t('whale.sentimentScore') + ': ' + (data.summary.sentimentScore || 0) +
+        '</span>';
+    }
+
+    // Smart Signals (whale x arb correlation)
+    var sigEl = document.getElementById('whale-smart-signals');
+    if (sigEl && data.smartSignals && data.smartSignals.length > 0) {
+      sigEl.innerHTML = data.smartSignals.map(function(sig) {
+        var dirIcon = sig.direction === 'bullish' ? '<span class="up">▲</span>' : sig.direction === 'bearish' ? '<span class="down">▼</span>' : '<span style="color:var(--secondary)">◆</span>';
+        var confBadge = sig.confidence === 'high' ? '<span class="whale-badge whale">' + t('whale.highConf') + '</span>' : '<span class="whale-badge dolphin">' + t('whale.medConf') + '</span>';
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">' +
+          dirIcon + ' ' + confBadge + ' ' +
+          '<span style="font-weight:600">' + escapeHtml(sig.type.replace(/_/g, ' ')) + '</span>' +
+          '<div style="color:var(--text-dim);font-size:0.85em;margin-top:2px">' + escapeHtml(sig.detail) + '</div>' +
+          '</div>';
+      }).join('');
+    } else if (sigEl) {
+      sigEl.innerHTML = '<span style="color:var(--text-dim)">' + t('whale.noSignals') + '</span>';
+    }
+
+    // Whale Confidence Score
+    renderWhaleConfidence(data);
+
+    // Data freshness
+    var freshEl = document.getElementById('whale-update-time');
+    if (freshEl) freshEl.textContent = t('whale.updated') + ' ' + new Date().toLocaleTimeString();
 
     showToast(t('whale.loaded'), 'success', 2000);
   } catch (err) {
@@ -1049,6 +1182,7 @@ async function loadWhaleData() {
 async function loadArbitrageData() {
   try {
     var data = await api('/api/arbitrage');
+    _arbData = data; // Cache for sorting/export
 
     // Stats
     var el;
@@ -1059,17 +1193,87 @@ async function loadArbitrageData() {
     el = document.getElementById('arb-volatility-count');
     if (el) el.textContent = data.opportunities.highVolatility.length;
 
-    // Basis opportunities
+    // Market summary banner
+    if (data.marketSummary) {
+      var ms = data.marketSummary;
+      var summaryHtml = '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;font-size:0.85em">';
+      summaryHtml += '<span style="color:var(--text-dim)">' + t('arb.totalCoins') + ': <strong style="color:var(--text)">' + ms.coinsScanned + '</strong></span>';
+      summaryHtml += '<span style="color:var(--text-dim)">' + t('arb.basisOpps') + ': <strong class="up">' + ms.basisOppsCount + '</strong></span>';
+      summaryHtml += '<span style="color:var(--text-dim)">' + t('arb.fundingRate') + ': <strong>' + fmt(ms.avgFundingRate, 4) + '%</strong></span>';
+      if (ms.bestOpportunity) {
+        summaryHtml += '<span style="color:var(--primary);font-weight:600">' +
+          (currentLang === 'zh' ? '最佳机会' : 'Best') + ': ' + ms.bestOpportunity.symbol +
+          ' (' + ms.bestOpportunity.grade + ' ' + (currentLang === 'zh' ? '评级' : 'grade') + ')</span>';
+      }
+      summaryHtml += '</div>';
+      var statsEl = document.getElementById('arb-basis-opps');
+      if (statsEl) statsEl.insertAdjacentHTML('beforebegin', '<div id="arb-market-summary">' + summaryHtml + '</div>');
+      // Remove old summary if re-rendering
+      var oldSummary = document.querySelectorAll('#arb-market-summary');
+      if (oldSummary.length > 1) oldSummary[0].remove();
+    }
+
+    // Basis opportunities (expandable cards with fee details)
     var basisEl = document.getElementById('arb-basis-opps');
     if (basisEl) {
       if (data.opportunities.basis.length === 0) {
         basisEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noOpps') + '</p>';
       } else {
         basisEl.innerHTML = data.opportunities.basis.map(function(o) {
-          return '<div class="opp-card">' +
-            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
-            '<span class="whale-badge ' + (o.direction === 'premium' ? 'whale' : 'dolphin') + '">' + o.direction + '</span>' +
-            '<div class="opp-detail">' + t('arb.basis') + ': ' + fmtPct(o.basis) + ' | ' + t('arb.strategy') + ': ' + o.strategy.replace(/_/g, ' ') + '</div>' +
+          var gradeColor = o.grade === 'A' ? 'var(--up)' : o.grade === 'B' ? 'var(--secondary)' : 'var(--warning)';
+          var feeHtml = '';
+          if (o.feeAnalysis) {
+            var fa = o.feeAnalysis;
+            feeHtml = '<div class="strategy-details">' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;padding:8px;background:var(--bg-card);border-radius:6px;font-size:0.85em">' +
+                '<div>' + t('arb.grossProfit') + ': <strong>' + fmtUSD(fa.grossProfit) + '</strong></div>' +
+                '<div>' + t('arb.fundingIncome') + ': <strong>' + fmtUSD(fa.fundingIncome) + '</strong></div>' +
+                '<div>' + t('arb.spotFee') + ': <span class="down">' + fmtUSD(fa.fees.spot) + '</span></div>' +
+                '<div>' + t('arb.futuresFee') + ': <span class="down">' + fmtUSD(fa.fees.futures) + '</span></div>' +
+                '<div>' + t('arb.slippage') + ': <span class="down">' + fmtUSD(fa.fees.slippage) + '</span></div>' +
+                '<div>' + t('arb.totalFees') + ': <span class="down">' + fmtUSD(fa.fees.total) + '</span></div>' +
+                '<div style="grid-column:span 2;border-top:1px solid var(--border);padding-top:4px;margin-top:4px">' +
+                  t('arb.netProfit') + ': <strong class="' + (fa.profitable ? 'up' : 'down') + '">' + fmtUSD(fa.netProfit) + '</strong> (' + fmtPct(fa.netROI) + ')' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+          }
+          // Position advice section
+          var posHtml = '';
+          if (o.positionAdvice) {
+            var pa = o.positionAdvice;
+            var rlColor = pa.riskLevel === 'HIGH' ? 'var(--down)' : pa.riskLevel === 'MEDIUM' ? 'var(--warning)' : 'var(--up)';
+            posHtml = '<div class="strategy-details">' +
+              '<div style="padding:8px;background:var(--bg);border-radius:6px;border-left:3px solid ' + rlColor + ';font-size:0.85em;margin-top:6px">' +
+                '<div style="font-weight:600;margin-bottom:4px">' + t('arb.posAdvice') + '</div>' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">' +
+                  '<div>' + t('arb.recSize') + ': <strong>' + fmtUSD(pa.recommendedPosition) + '</strong> (' + pa.percentOfAccount + '%)</div>' +
+                  '<div>' + t('arb.riskLevel') + ': <strong style="color:' + rlColor + '">' + pa.riskLevel + '</strong></div>' +
+                  '<div>' + t('arb.hedge') + ': ' + pa.hedge.spotAction + ' ' + t('arb.spot') + ' + ' + pa.hedge.futuresAction + ' ' + t('arb.futures') + '</div>' +
+                  '<div>' + t('arb.leverage') + ': ' + pa.hedge.leverage + 'x | ' + t('arb.margin') + ': ' + fmtUSD(pa.hedge.initialMargin) + '</div>' +
+                  '<div>' + t('arb.liqPrice') + ': <span class="down">' + fmtUSD(pa.hedge.liquidationPrice) + '</span></div>' +
+                  '<div>' + t('arb.monthlyROI') + ': <strong class="up">' + fmtPct(pa.expectedMonthlyROI) + '</strong></div>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+          }
+          var oiHtml = o.openInterestUSD ? ' | OI: ' + (o.openInterestUSD > 1e9 ? '$' + (o.openInterestUSD/1e9).toFixed(1) + 'B' : '$' + (o.openInterestUSD/1e6).toFixed(1) + 'M') : '';
+          return '<div class="opp-card expandable" data-expand>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<div>' +
+                '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
+                '<span class="whale-badge ' + (o.direction === 'premium' ? 'whale' : 'dolphin') + '">' + o.direction + '</span> ' +
+                '<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:' + gradeColor + ';color:#000;font-weight:700;font-size:0.8em">' + o.grade + '</span>' +
+                '<span class="expand-icon">▼</span>' +
+              '</div>' +
+              '<span style="color:var(--primary);font-weight:600">' + t('arb.apy') + ': ' + o.annualizedReturn + '%</span>' +
+            '</div>' +
+            '<div class="opp-detail" style="margin-top:6px">' +
+              t('arb.basis') + ': ' + fmtPct(o.basis) + ' | ' +
+              t('arb.strategy') + ': ' + o.strategy.replace(/_/g, ' ') + oiHtml +
+            '</div>' +
+            feeHtml +
+            posHtml +
             '</div>';
         }).join('');
       }
@@ -1083,30 +1287,80 @@ async function loadArbitrageData() {
       } else {
         volEl.innerHTML = data.opportunities.highVolatility.map(function(o) {
           return '<div class="opp-card">' +
-            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span>' +
-            '<div class="opp-detail">' + t('arb.dayRange') + ': ' + fmt(o.dayRange, 2) + '% | ' + t('arb.change24h') + ': ' + fmtPct(o.change24h) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span>' +
+              '<span style="color:var(--warning);font-weight:600">' + fmt(o.dayRange, 2) + '% ' + (currentLang === 'zh' ? '波幅' : 'range') + '</span>' +
+            '</div>' +
+            '<div class="opp-detail" style="margin-top:4px">' +
+              t('arb.change24h') + ': <span class="' + (o.change24h >= 0 ? 'up' : 'down') + '">' + fmtPct(o.change24h) + '</span>' +
+              (o.high24h ? ' | H: ' + fmtUSD(o.high24h) + ' L: ' + fmtUSD(o.low24h) : '') +
+              (o.volume ? ' | Vol: ' + (o.volume > 1e9 ? '$' + (o.volume / 1e9).toFixed(1) + 'B' : fmtUSD(o.volume)) : '') +
+            '</div>' +
             '</div>';
         }).join('');
       }
     }
 
-    // Coins table
-    var coinsBody = document.getElementById('arb-coins-body');
-    if (coinsBody) {
-      coinsBody.innerHTML = data.coins.map(function(c) {
-        var basisClass = Math.abs(c.basis) > 0.1 ? (c.basis > 0 ? 'up' : 'down') : '';
-        return '<tr>' +
-          '<td style="font-weight:600">' + escapeHtml(c.symbol) + '</td>' +
-          '<td>' + fmtUSD(c.spotPrice) + '</td>' +
-          '<td>' + fmtUSD(c.futuresPrice) + '</td>' +
-          '<td class="' + basisClass + '">' + fmtPct(c.basis) + '</td>' +
-          '<td>' + fmt(c.fundingRate, 4) + '%</td>' +
-          '<td class="' + (c.fundingAPY > 20 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
-          '<td>' + fmt(c.dayRange, 2) + '%</td>' +
-          '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
-          '</tr>';
-      }).join('');
+    // Coins table (using shared render function)
+    renderArbCoinsTable(data.coins);
+
+    // Triangular arbitrage
+    var triEl = document.getElementById('arb-tri-opps');
+    if (triEl && data.opportunities.triangular) {
+      var triOpps = data.opportunities.triangular;
+      if (triOpps.length === 0) {
+        triEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noTriArb') + '</p>';
+      } else {
+        triEl.innerHTML = triOpps.map(function(tri) {
+          var profitClass = tri.profitable ? 'up' : 'down';
+          return '<div class="opp-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<span class="opp-symbol">' + escapeHtml(tri.path) + '</span>' +
+              '<span class="' + profitClass + '" style="font-weight:600">' + fmtPct(tri.profitPct) + '</span>' +
+            '</div>' +
+            '<div class="opp-detail" style="margin-top:4px">' +
+              t('arb.direction') + ': ' + tri.direction + ' | ' +
+              t('arb.perTenK') + ': ' + fmtUSD(tri.perTenK) + ' | ' +
+              t('arb.legs') + ': ' + tri.legs.join(' > ') +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
     }
+
+    // Fee-adjusted profitable
+    var feeEl = document.getElementById('arb-fee-adjusted');
+    if (feeEl && data.opportunities.profitableAfterFees) {
+      var feeOpps = data.opportunities.profitableAfterFees;
+      if (feeOpps.length === 0) {
+        feeEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noFeeProfit') + '</p>';
+      } else {
+        feeEl.innerHTML = '<div style="font-size:0.85em;color:var(--text-dim);margin-bottom:8px">' + t('arb.feeNote') + '</div>' +
+          feeOpps.map(function(f) {
+          return '<div class="opp-card">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<span class="opp-symbol">' + escapeHtml(f.symbol) + '</span>' +
+              '<span class="up" style="font-weight:600">' + t('arb.netROI') + ': ' + fmtPct(f.netROI) + '</span>' +
+            '</div>' +
+            '<div class="opp-detail" style="margin-top:4px">' +
+              t('arb.netProfit') + ': ' + fmtUSD(f.netProfit) + ' | ' +
+              t('arb.basis') + ': ' + fmtPct(f.basis) + ' | ' +
+              t('arb.breakEven') + ': ' + fmtPct(f.breakEvenBasis) +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
+    // Data freshness
+    var arbFresh = document.getElementById('arb-update-time');
+    if (arbFresh) arbFresh.textContent = t('arb.updated') + ' ' + new Date().toLocaleTimeString();
+
+    // Load arb history chart (non-blocking)
+    loadArbHistoryChart();
+
+    // Refresh comparison table with latest data
+    renderComparisonTable();
 
     showToast(t('arb.loaded'), 'success', 2000);
   } catch (err) {
@@ -1116,9 +1370,68 @@ async function loadArbitrageData() {
   }
 }
 
+async function loadArbHistoryChart() {
+  try {
+    var hist = await api('/api/arb-history');
+    if (!hist.snapshots || hist.snapshots.length < 2) return;
+    var labels = hist.snapshots.map(function(s) {
+      var d = new Date(s.time);
+      return d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+    });
+    renderChart('chart-arb-history', {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: t('arb.avgBasis'),
+            data: hist.snapshots.map(function(s) { return s.avgBasis; }),
+            borderColor: '#00e676',
+            backgroundColor: 'rgba(0,230,118,0.08)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 2,
+            borderWidth: 2,
+            yAxisID: 'y',
+          },
+          {
+            label: t('arb.avgFunding'),
+            data: hist.snapshots.map(function(s) { return s.avgFunding; }),
+            borderColor: '#00b0ff',
+            borderWidth: 1.5,
+            borderDash: [5, 3],
+            pointRadius: 1,
+            fill: false,
+            tension: 0.4,
+            yAxisID: 'y',
+          },
+          {
+            label: t('arb.profitableCount'),
+            data: hist.snapshots.map(function(s) { return s.profitableCount; }),
+            borderColor: '#ffab00',
+            backgroundColor: 'rgba(255,171,0,0.15)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 1,
+            borderWidth: 1.5,
+            yAxisID: 'y1',
+          },
+        ],
+      },
+      options: {
+        scales: {
+          y: { position: 'left', title: { display: true, text: '%', color: '#8a8f98' } },
+          y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '#', color: '#8a8f98' } },
+        },
+      },
+    });
+  } catch (e) { /* ignore */ }
+}
+
 async function loadFundingRateData() {
   try {
     var data = await api('/api/funding-rate');
+    _fundingData = data;
 
     // Sentiment summary
     var el;
@@ -1132,29 +1445,36 @@ async function loadFundingRateData() {
     el = document.getElementById('funding-negative');
     if (el) el.textContent = data.marketSentiment.negativeCount;
 
-    // Opportunities
+    // Opportunities with sparklines
     var oppsEl = document.getElementById('funding-opps');
     if (oppsEl) {
       if (data.opportunities.length === 0) {
         oppsEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('funding.noOpps') + '</p>';
       } else {
         oppsEl.innerHTML = data.opportunities.map(function(o) {
+          var sparkHtml = o.history ? ' ' + renderSparkline(o.history.map(function(h) { return h.rate; }), 14) : '';
+          var trendLabel = o.trend ? ' <span style="font-size:0.8em;color:var(--text-dim)">(' + o.trend + ')</span>' : '';
           return '<div class="opp-card">' +
-            '<span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
-            '<span class="risk-badge ' + o.riskLevel + '">' + o.riskLevel + '</span>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<div><span class="opp-symbol">' + escapeHtml(o.symbol) + '</span> ' +
+              '<span class="risk-badge ' + o.riskLevel + '">' + o.riskLevel + '</span>' + trendLabel + '</div>' +
+              '<div>' + sparkHtml + '</div>' +
+            '</div>' +
             '<div class="opp-detail">' + t('funding.rate') + ': ' + fmt(o.fundingRate, 4) + '% | APY: ' + fmt(o.grossAPY, 1) + '% | ' + t('funding.monthly') + ': $' + fmt(o.monthlyYield, 0) + '</div>' +
             '</div>';
         }).join('');
       }
     }
 
-    // Rates table
+    // Rates table with sparklines and trend
     var ratesBody = document.getElementById('funding-rates-body');
     if (ratesBody) {
       ratesBody.innerHTML = data.rates.map(function(r) {
+        var sparkHtml = r.history ? renderSparkline(r.history.map(function(h) { return h.rate; }), 12) : '';
+        var trendIcon = r.trend === 'rising' ? ' <span style="color:var(--up)">&#9650;</span>' : r.trend === 'falling' ? ' <span style="color:var(--down)">&#9660;</span>' : '';
         return '<tr>' +
           '<td style="font-weight:600">' + escapeHtml(r.symbol) + '</td>' +
-          '<td class="' + (r.fundingRate > 0 ? 'up' : r.fundingRate < 0 ? 'down' : '') + '">' + fmt(r.fundingRate, 4) + '%</td>' +
+          '<td class="' + (r.fundingRate > 0 ? 'up' : r.fundingRate < 0 ? 'down' : '') + '">' + fmt(r.fundingRate, 4) + '%' + trendIcon + ' ' + sparkHtml + '</td>' +
           '<td>' + fmtUSD(r.markPrice) + '</td>' +
           '<td>' + fmtUSD(r.indexPrice) + '</td>' +
           '<td>' + fmt(r.grossAPY, 1) + '%</td>' +
@@ -1164,6 +1484,16 @@ async function loadFundingRateData() {
           '</tr>';
       }).join('');
     }
+
+    // Start countdown timer (use earliest nextFundingTime)
+    if (data.rates.length > 0) {
+      var earliest = data.rates.reduce(function(min, r) { return r.nextFundingTime < min ? r.nextFundingTime : min; }, data.rates[0].nextFundingTime);
+      startFundingCountdown(earliest);
+    }
+
+    // Data freshness
+    var fundFresh = document.getElementById('funding-update-time');
+    if (fundFresh) fundFresh.textContent = t('funding.updated') + ' ' + new Date().toLocaleTimeString();
 
     showToast(t('funding.loaded'), 'success', 2000);
   } catch (err) {
@@ -1189,6 +1519,325 @@ function showFundingTab() {
   loadFundingRateData();
 }
 
+// ─── Cached Data for Sorting/Export ────────────────────────────────────────
+var _whaleData = null;
+var _arbData = null;
+var _fundingData = null;
+var _nextFundingTime = 0;
+var _fundingCountdownTimer = null;
+
+// ─── Table Sorting ──────────────────────────────────────────────────────
+function sortTableData(data, key, asc) {
+  return data.slice().sort(function(a, b) {
+    var va = a[key], vb = b[key];
+    if (typeof va === 'string') return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+    va = va || 0; vb = vb || 0;
+    return asc ? va - vb : vb - va;
+  });
+}
+
+function handleSortClick(e) {
+  var th = e.target.closest('th.sortable');
+  if (!th) return;
+  var table = th.closest('table');
+  if (!table) return;
+  var key = th.dataset.sort;
+  var wasDesc = th.classList.contains('sort-desc');
+  // Reset all sort indicators in this table
+  table.querySelectorAll('th.sortable').forEach(function(h) { h.classList.remove('sort-asc', 'sort-desc'); });
+  // Toggle direction
+  var asc = wasDesc;
+  th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+
+  if (table.id === 'whale-trades-table' && _whaleData) {
+    renderWhaleTradesTable(sortTableData(_whaleData.largeTrades, key, asc));
+  } else if (table.id === 'arb-coins-table' && _arbData) {
+    renderArbCoinsTable(sortTableData(_arbData.coins, key, asc));
+  }
+}
+
+function renderWhaleTradesTable(trades) {
+  var tbody = document.getElementById('whale-trades-body');
+  if (!tbody) return;
+  if (!trades || trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">' + t('whale.noTrades') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = trades.map(function(tr) {
+    var tierClass = tr.usd >= 500000 ? 'whale' : tr.usd >= 200000 ? 'shark' : 'dolphin';
+    return '<tr>' +
+      '<td>' + (tr.time ? new Date(tr.time).toLocaleTimeString() : '--') + '</td>' +
+      '<td style="font-weight:600">' + escapeHtml(tr.symbol || 'BTC') + '</td>' +
+      '<td><span class="side-badge ' + tr.side + '">' + tr.side.toUpperCase() + '</span></td>' +
+      '<td>' + fmtUSD(tr.price) + '</td>' +
+      '<td>' + fmt(tr.qty, 4) + (tr.fills > 1 ? ' <small style="color:var(--text-dim)">(' + tr.fills + ' fills)</small>' : '') + '</td>' +
+      '<td style="font-weight:600"><span class="whale-badge ' + tierClass + '">' + fmtUSD(tr.usd) + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function renderArbCoinsTable(coins) {
+  var coinsBody = document.getElementById('arb-coins-body');
+  if (!coinsBody) return;
+  coinsBody.innerHTML = coins.map(function(c) {
+    var basisClass = Math.abs(c.basis) > 0.05 ? (c.basis > 0 ? 'up' : 'down') : '';
+    var gradeColor = c.riskReward && c.riskReward.grade === 'A' ? 'var(--up)' : c.riskReward && c.riskReward.grade === 'B' ? 'var(--secondary)' : 'var(--text-dim)';
+    var fundingTrendIcon = c.fundingTrend === 'rising' ? ' <span style="color:var(--up)" title="Rising">&#9650;</span>' : c.fundingTrend === 'falling' ? ' <span style="color:var(--down)" title="Falling">&#9660;</span>' : '';
+    var oiDisplay = c.openInterestUSD > 1e9 ? '$' + (c.openInterestUSD / 1e9).toFixed(1) + 'B' : c.openInterestUSD > 1e6 ? '$' + (c.openInterestUSD / 1e6).toFixed(1) + 'M' : fmtUSD(c.openInterestUSD || 0);
+    return '<tr>' +
+      '<td style="font-weight:600">' + escapeHtml(c.symbol) +
+        (c.riskReward ? ' <span style="color:' + gradeColor + ';font-size:0.8em">' + c.riskReward.grade + '</span>' : '') + '</td>' +
+      '<td>' + fmtUSD(c.spotPrice) + '</td>' +
+      '<td>' + fmtUSD(c.futuresPrice) + '</td>' +
+      '<td class="' + basisClass + '">' + fmtPct(c.basis) + '</td>' +
+      '<td>' + fmt(c.fundingRate, 4) + '%' + fundingTrendIcon + '</td>' +
+      '<td class="' + (Math.abs(c.fundingAPY) > 15 ? 'up' : '') + '">' + fmt(c.fundingAPY, 1) + '%</td>' +
+      '<td>' + fmt(c.dayRange, 2) + '%</td>' +
+      '<td>' + oiDisplay + '</td>' +
+      '<td>' + (c.volume > 1e9 ? '$' + (c.volume / 1e9).toFixed(1) + 'B' : fmtUSD(c.volume)) + '</td>' +
+      '<td><button class="btn-compare" data-compare="' + escapeHtml(c.symbol) + '" title="Add to compare" style="cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--primary);border-radius:4px;padding:0 6px;font-size:0.9em">+</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+// ─── Whale Confidence Score ──────────────────────────────────────────────
+function renderWhaleConfidence(data) {
+  var score = 50; // neutral baseline
+  var factors = [];
+
+  // Factor 1: Buy/sell ratio (0-25 points)
+  var buyRatio = data.summary.buyRatio || 50;
+  var tradeScore = Math.round((buyRatio - 50) * 0.5);
+  score += tradeScore;
+  factors.push(t('whale.factorTrade') + ': ' + (tradeScore > 0 ? '+' : '') + tradeScore);
+
+  // Factor 2: Liquidation imbalance (-15 to +15)
+  if (data.liquidations && data.liquidations.summary) {
+    var liq = data.liquidations.summary;
+    var liqScore = 0;
+    if (liq.shortLiqVolume > liq.longLiqVolume * 1.5) liqScore = 10;
+    else if (liq.longLiqVolume > liq.shortLiqVolume * 1.5) liqScore = -10;
+    score += liqScore;
+    factors.push(t('whale.factorLiq') + ': ' + (liqScore > 0 ? '+' : '') + liqScore);
+  }
+
+  // Factor 3: Order book depth (-10 to +10)
+  if (data.orderBook && data.orderBook.btc) {
+    var imb = data.orderBook.btc.imbalance || 1;
+    var obScore = Math.round((imb - 1) * 15);
+    obScore = Math.max(-10, Math.min(10, obScore));
+    score += obScore;
+    factors.push(t('whale.factorOB') + ': ' + (obScore > 0 ? '+' : '') + obScore);
+  }
+
+  // Factor 4: On-chain activity
+  if (data.onchain && data.onchain.transactions.length > 5) {
+    score += 5;
+    factors.push(t('whale.factorOnchain') + ': +5');
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  var label = score >= 70 ? t('whale.confBullish') : score >= 55 ? t('whale.confSlightBull') : score >= 45 ? t('whale.confNeutral') : score >= 30 ? t('whale.confSlightBear') : t('whale.confBearish');
+  var color = score >= 70 ? 'var(--up)' : score >= 55 ? '#66bb6a' : score >= 45 ? 'var(--text-dim)' : score >= 30 ? '#ffa726' : 'var(--down)';
+
+  var valEl = document.getElementById('whale-confidence-value');
+  var fillEl = document.getElementById('whale-confidence-fill');
+  var labelEl = document.getElementById('whale-confidence-label');
+  var factorsEl = document.getElementById('whale-confidence-factors');
+
+  if (valEl) { valEl.textContent = score; valEl.style.color = color; }
+  if (fillEl) { fillEl.style.width = score + '%'; fillEl.style.background = color; }
+  if (labelEl) { labelEl.textContent = label; labelEl.style.color = color; }
+  if (factorsEl) { factorsEl.textContent = factors.join(' | '); }
+}
+
+// ─── Funding Countdown Timer ─────────────────────────────────────────────
+function startFundingCountdown(nextTime) {
+  _nextFundingTime = nextTime;
+  if (_fundingCountdownTimer) clearInterval(_fundingCountdownTimer);
+  updateFundingCountdown();
+  _fundingCountdownTimer = setInterval(updateFundingCountdown, 1000);
+}
+
+function updateFundingCountdown() {
+  var el = document.getElementById('funding-countdown');
+  if (!el || !_nextFundingTime) return;
+  var diff = _nextFundingTime - Date.now();
+  if (diff <= 0) { el.textContent = t('funding.settling'); el.style.color = 'var(--up)'; return; }
+  var h = Math.floor(diff / 3600000);
+  var m = Math.floor((diff % 3600000) / 60000);
+  var s = Math.floor((diff % 60000) / 1000);
+  el.textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+// ─── Sparkline Renderer ──────────────────────────────────────────────────
+function renderSparkline(values, height) {
+  height = height || 16;
+  if (!values || values.length < 2) return '';
+  var max = Math.max.apply(null, values.map(function(v) { return Math.abs(v); }));
+  if (max === 0) max = 1;
+  var lastVal = values[values.length - 1];
+  var color = lastVal >= 0 ? 'var(--up)' : 'var(--down)';
+  var bars = values.map(function(v) {
+    var h = Math.max(2, Math.round((Math.abs(v) / max) * height));
+    var c = v >= 0 ? 'var(--up)' : 'var(--down)';
+    return '<span class="sparkline-bar" style="height:' + h + 'px;background:' + c + '"></span>';
+  }).join('');
+  return '<span class="sparkline" style="height:' + height + 'px;line-height:' + height + 'px">' + bars + '</span>';
+}
+
+// ─── CSV Export Functions ────────────────────────────────────────────────
+function downloadCSV(filename, rows) {
+  var csv = rows.map(function(r) {
+    return r.map(function(cell) {
+      var s = String(cell == null ? '' : cell);
+      return s.indexOf(',') >= 0 || s.indexOf('"') >= 0 ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast(t('export.success'), 'success', 2000);
+}
+
+function exportWhaleCSV() {
+  if (!_whaleData) { showToast(t('export.noData'), 'error'); return; }
+  var rows = [['Time', 'Symbol', 'Side', 'Price', 'Quantity', 'USD Value', 'Fills']];
+  (_whaleData.largeTrades || []).forEach(function(tr) {
+    rows.push([tr.time, tr.symbol, tr.side, tr.price, tr.qty, tr.usd, tr.fills]);
+  });
+  if (_whaleData.liquidations) {
+    rows.push([]);
+    rows.push(['--- Liquidations ---']);
+    rows.push(['Time', 'Symbol', 'Side', 'Price', 'Quantity', 'USD Value', 'Tier']);
+    (_whaleData.liquidations.recent || []).forEach(function(l) {
+      rows.push([l.time, l.symbol, l.side, l.price, l.qty, l.usd, l.tier]);
+    });
+  }
+  downloadCSV('alphamind-whale-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
+
+function exportWhaleTrades() {
+  if (!_whaleData || !_whaleData.largeTrades) { showToast(t('export.noData'), 'error'); return; }
+  var rows = [['Time', 'Symbol', 'Side', 'Price', 'Quantity', 'USD Value', 'Fills']];
+  _whaleData.largeTrades.forEach(function(tr) { rows.push([tr.time, tr.symbol, tr.side, tr.price, tr.qty, tr.usd, tr.fills]); });
+  downloadCSV('whale-trades-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
+
+function exportArbCSV() {
+  if (!_arbData) { showToast(t('export.noData'), 'error'); return; }
+  var rows = [['Symbol', 'Spot', 'Futures', 'Basis%', 'FundingRate%', 'FundingAPY%', 'DayRange%', 'OpenInterest$', 'Volume$', 'Grade', 'NetROI%']];
+  _arbData.coins.forEach(function(c) {
+    rows.push([c.symbol, c.spotPrice, c.futuresPrice, c.basis.toFixed(4), c.fundingRate.toFixed(4), c.fundingAPY.toFixed(1),
+      c.dayRange.toFixed(2), c.openInterestUSD || 0, c.volume, c.riskReward ? c.riskReward.grade : '', c.feeAnalysis ? c.feeAnalysis.netROI : '']);
+  });
+  downloadCSV('alphamind-arb-' + new Date().toISOString().slice(0,10) + '.csv', rows);
+}
+
+function exportArbCoins() { exportArbCSV(); }
+
+// ─── Position Size Recalculation ─────────────────────────────────────────
+function recalcFees() {
+  if (!_arbData) return;
+  var input = document.getElementById('arb-position-size');
+  var size = input ? parseInt(input.value) : 10000;
+  if (isNaN(size) || size < 100) { showToast(t('arb.invalidSize'), 'error'); return; }
+
+  // Recalculate fee analysis for all coins via API
+  var feeEl = document.getElementById('arb-fee-adjusted');
+  if (!feeEl) return;
+
+  // Client-side recalculation using the same formula
+  var SPOT_FEE = 0.001, FUTURES_FEE = 0.0004, SLIPPAGE = 0.0005;
+  var recalced = _arbData.coins.map(function(c) {
+    var gross = Math.abs(c.basis / 100) * size;
+    var funding = Math.abs(c.fundingRate / 100) * size;
+    var fees = size * SPOT_FEE + size * FUTURES_FEE + size * SLIPPAGE * 2;
+    var net = gross + funding - fees;
+    return { symbol: c.symbol, basis: c.basis, netProfit: parseFloat(net.toFixed(2)), netROI: parseFloat((net / size * 100).toFixed(4)), breakEvenBasis: parseFloat((fees / size * 100).toFixed(4)), profitable: net > 0 };
+  }).filter(function(c) { return c.profitable; }).sort(function(a, b) { return b.netROI - a.netROI; }).slice(0, 5);
+
+  if (recalced.length === 0) {
+    feeEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:16px">' + t('arb.noFeeProfit') + '</p>';
+  } else {
+    feeEl.innerHTML = '<div style="font-size:0.85em;color:var(--text-dim);margin-bottom:8px">' + t('arb.feeNoteCustom').replace('{size}', fmtUSD(size)) + '</div>' +
+      recalced.map(function(f) {
+      return '<div class="opp-card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<span class="opp-symbol">' + escapeHtml(f.symbol) + '</span>' +
+          '<span class="up" style="font-weight:600">' + t('arb.netROI') + ': ' + fmtPct(f.netROI) + '</span>' +
+        '</div>' +
+        '<div class="opp-detail" style="margin-top:4px">' +
+          t('arb.netProfit') + ': ' + fmtUSD(f.netProfit) + ' | ' +
+          t('arb.basis') + ': ' + fmtPct(f.basis) + ' | ' +
+          t('arb.breakEven') + ': ' + fmtPct(f.breakEvenBasis) +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  showToast(t('arb.feeRecalced'), 'success', 2000);
+}
+
+// ─── Comparison Tool ──────────────────────────────────────────────────────
+var _comparisonList = JSON.parse(localStorage.getItem('am_arb_compare') || '[]');
+
+function addToComparison(symbol) {
+  if (!_arbData) return;
+  if (_comparisonList.indexOf(symbol) >= 0) {
+    showToast(symbol + ' ' + t('arb.alreadyCompared'), 'warning', 2000);
+    return;
+  }
+  if (_comparisonList.length >= 8) {
+    showToast(t('arb.compareFull'), 'warning', 2000);
+    return;
+  }
+  _comparisonList.push(symbol);
+  localStorage.setItem('am_arb_compare', JSON.stringify(_comparisonList));
+  renderComparisonTable();
+  showToast(symbol + ' ' + t('arb.addedCompare'), 'success', 1500);
+}
+
+function removeFromComparison(symbol) {
+  _comparisonList = _comparisonList.filter(function(s) { return s !== symbol; });
+  localStorage.setItem('am_arb_compare', JSON.stringify(_comparisonList));
+  renderComparisonTable();
+}
+
+function clearComparison() {
+  _comparisonList = [];
+  localStorage.setItem('am_arb_compare', '[]');
+  renderComparisonTable();
+}
+
+function renderComparisonTable() {
+  var tbody = document.getElementById('arb-compare-body');
+  if (!tbody || !_arbData) return;
+  if (_comparisonList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px">' + t('arb.compareEmpty') + '</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _comparisonList.map(function(sym) {
+    var coin = _arbData.coins.find(function(c) { return c.symbol === sym; });
+    if (!coin) return '<tr><td colspan="8" style="color:var(--text-dim)">' + escapeHtml(sym) + ' — ' + t('arb.noData') + '</td></tr>';
+    var basisClass = coin.basis > 0 ? 'up' : coin.basis < 0 ? 'down' : '';
+    var gradeColor = coin.riskReward.grade === 'A' ? 'var(--up)' : coin.riskReward.grade === 'B' ? 'var(--secondary)' : 'var(--warning)';
+    var monthlyROI = coin.positionAdvice ? coin.positionAdvice.expectedMonthlyROI : 0;
+    return '<tr>' +
+      '<td style="font-weight:600">' + escapeHtml(coin.symbol) + '</td>' +
+      '<td class="' + basisClass + '">' + fmtPct(coin.basis) + '</td>' +
+      '<td>' + fmt(coin.fundingRate, 4) + '%</td>' +
+      '<td><span style="color:' + gradeColor + ';font-weight:700">' + coin.riskReward.grade + '</span> (' + coin.riskReward.ratio + ')</td>' +
+      '<td>' + (coin.feeAnalysis ? fmtUSD(coin.feeAnalysis.fees.total) : '--') + '</td>' +
+      '<td class="' + (coin.feeAnalysis && coin.feeAnalysis.profitable ? 'up' : 'down') + '">' + (coin.feeAnalysis ? fmtPct(coin.feeAnalysis.netROI) : '--') + '</td>' +
+      '<td class="up">' + fmtPct(monthlyROI) + '</td>' +
+      '<td><button data-rm-compare="' + escapeHtml(coin.symbol) + '" style="cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--down);border-radius:4px;padding:0 6px;font-size:0.9em">×</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
 // ─── i18n ─────────────────────────────────────────────────────────────────
 var currentLang = 'en';
 var i18n = {
@@ -1212,6 +1861,21 @@ var i18n = {
     'whale.noTrades': 'No large trades detected', 'whale.noOnchain': 'No large on-chain transactions found',
     'whale.loaded': 'Whale data updated', 'whale.error': 'Failed to load whale data',
     'whale.block': 'Block',
+    // Whale liquidations & depth
+    'whale.liquidations': 'Recent Liquidations (BTC + ETH)', 'whale.longLiq': 'Long Liq:', 'whale.shortLiq': 'Short Liq:',
+    'whale.liqCount': 'Count:', 'whale.noLiq': 'No recent liquidations', 'whale.loadingLiq': 'Loading liquidations...',
+    'whale.orderBook': 'Order Book Depth', 'whale.imbalance': 'Imbalance', 'whale.bid': 'Bid', 'whale.ask': 'Ask',
+    'whale.spread': 'Spread', 'whale.bidWalls': 'Bid Walls', 'whale.askWalls': 'Ask Walls',
+    'whale.accDist': 'Whale Activity Pattern', 'whale.accumulation': 'Accumulation (Smart Money Buying)',
+    'whale.distribution': 'Distribution (Smart Money Selling)', 'whale.adNeutral': 'Neutral (No Clear Pattern)',
+    'whale.sentimentScore': 'Sentiment Score', 'whale.th.liqSide': 'Type',
+    'whale.confidence': 'Whale Confidence Score', 'whale.updated': 'Updated:',
+    'whale.smartSignals': 'Smart Signals', 'whale.noSignals': 'No cross-module signals detected',
+    'whale.highConf': 'HIGH', 'whale.medConf': 'MED',
+    'whale.factorTrade': 'Trade Flow', 'whale.factorLiq': 'Liquidations', 'whale.factorOB': 'Order Book', 'whale.factorOnchain': 'On-Chain',
+    'whale.confBullish': 'Strong Bullish', 'whale.confSlightBull': 'Slightly Bullish', 'whale.confNeutral': 'Neutral',
+    'whale.confSlightBear': 'Slightly Bearish', 'whale.confBearish': 'Strong Bearish',
+    'whale.viewOnChain': 'View on Blockchain.info', 'whale.autoRefresh': 'Auto-refresh: 30s',
     // Arb page
     'arb.scanner': 'Arbitrage Scanner', 'arb.funding': 'Funding Rates',
     'arb.totalCoins': 'Coins Scanned', 'arb.basisOpps': 'Basis Opportunities', 'arb.volatility': 'High Volatility',
@@ -1221,6 +1885,30 @@ var i18n = {
     'arb.change24h': '24h Change', 'arb.strategy': 'Strategy',
     'arb.noOpps': 'No basis opportunities detected', 'arb.noVolatility': 'No high volatility coins',
     'arb.loaded': 'Arbitrage data updated', 'arb.error': 'Failed to load arbitrage data',
+    // Arb new features
+    'arb.triangular': 'Triangular Arbitrage', 'arb.noTriArb': 'No triangular arbitrage detected',
+    'arb.direction': 'Direction', 'arb.perTenK': 'Per $10K', 'arb.legs': 'Legs',
+    'arb.feeAdjusted': 'Fee-Adjusted Profitable', 'arb.noFeeProfit': 'No opportunities profitable after fees',
+    'arb.feeNote': 'Based on $10K position. Fees: 0.1% spot + 0.04% futures + 0.05% slippage.',
+    'arb.netROI': 'Net ROI', 'arb.netProfit': 'Net Profit', 'arb.breakEven': 'Break-even',
+    'arb.openInterest': 'Open Interest', 'arb.loadingTri': 'Loading triangular arb...', 'arb.loadingFee': 'Loading fee analysis...',
+    'arb.updated': 'Updated:', 'arb.autoRefresh': 'Auto-refresh: 30s', 'arb.positionSize': 'Position Size:',
+    'arb.recalc': 'Recalculate', 'arb.invalidSize': 'Invalid position size', 'arb.feeRecalced': 'Fees recalculated',
+    'arb.feeNoteCustom': 'Based on {size} position. Fees: 0.1% spot + 0.04% futures + 0.05% slippage.',
+    'arb.grossProfit': 'Gross Profit', 'arb.fundingIncome': 'Funding Income', 'arb.spotFee': 'Spot Fee',
+    'arb.futuresFee': 'Futures Fee', 'arb.slippage': 'Slippage', 'arb.totalFees': 'Total Fees',
+    'arb.historyTitle': 'Basis Trend (Historical)', 'arb.historyNote': 'Records every fetch cycle. Resets on server restart.',
+    'arb.avgBasis': 'Avg Basis %', 'arb.avgFunding': 'Avg Funding %', 'arb.profitableCount': 'Profitable #',
+    'arb.posAdvice': 'Position Sizing Advice', 'arb.recSize': 'Recommended', 'arb.riskLevel': 'Risk',
+    'arb.hedge': 'Hedge', 'arb.spot': 'Spot', 'arb.futures': 'Futures', 'arb.leverage': 'Leverage',
+    'arb.margin': 'Margin', 'arb.liqPrice': 'Liq Price', 'arb.monthlyROI': 'Monthly ROI',
+    'arb.compareTitle': 'Quick Compare', 'arb.clearCompare': 'Clear', 'arb.compareHint': 'Click + on any coin row to add',
+    'arb.compareEmpty': 'No coins added yet', 'arb.alreadyCompared': 'already in compare',
+    'arb.compareFull': 'Max 8 coins', 'arb.addedCompare': 'added to compare', 'arb.noData': 'no data',
+    'arb.grade': 'Grade',
+    'export.success': 'Exported CSV', 'export.noData': 'No data to export',
+    'funding.settling': 'Settling now!', 'funding.nextPayment': 'Next Funding Payment',
+    'funding.countdownNote': 'Funding rates settle every 8 hours', 'funding.updated': 'Updated:',
     // Funding page
     'funding.title': 'Funding Rate Analysis', 'funding.sentimentLabel': 'Market Sentiment',
     'funding.avgRate': 'Avg Rate', 'funding.positive': 'Positive', 'funding.negative': 'Negative',
@@ -1234,7 +1922,8 @@ var i18n = {
     'whale.volume24h': '24h Volume', 'whale.largeTrades': 'Binance Large Trades (>$500K)',
     'whale.loading': 'Loading whale data...', 'whale.loadingOnchain': 'Loading on-chain data...',
     'whale.blockHeight': 'Block Height', 'whale.blockHash': 'Block Hash',
-    'whale.th.time': 'Time', 'whale.th.side': 'Side', 'whale.th.price': 'Price',
+    'whale.liveFeed': 'Live Alert Feed', 'whale.waitingAlerts': 'Listening for whale activity...',
+    'whale.th.time': 'Time', 'whale.th.symbol': 'Symbol', 'whale.th.side': 'Side', 'whale.th.price': 'Price',
     'whale.th.quantity': 'Quantity', 'whale.th.usdValue': 'USD Value',
     'whale.th.hash': 'TX Hash', 'whale.th.btcAmount': 'BTC Amount', 'whale.th.size': 'Size',
     // Arb HTML labels
@@ -1245,7 +1934,7 @@ var i18n = {
     'arb.loadingVolatility': 'Loading volatility data...',
     'arb.th.symbol': 'Symbol', 'arb.th.spotPrice': 'Spot Price', 'arb.th.futuresPrice': 'Futures Price',
     'arb.th.basis': 'Basis (%)', 'arb.th.fundingRate': 'Funding Rate', 'arb.th.fundingApy': 'Funding APY',
-    'arb.th.dayRange': 'Day Range', 'arb.th.volume': 'Volume',
+    'arb.th.dayRange': 'Day Range', 'arb.th.openInterest': 'Open Interest', 'arb.th.volume': 'Volume',
     // Funding HTML labels
     'funding.sentiment': 'Sentiment', 'funding.opportunities': 'Funding Opportunities',
     'funding.rates': 'All Funding Rates', 'funding.loadingOpps': 'Loading opportunities...',
@@ -1325,6 +2014,21 @@ var i18n = {
     'whale.noTrades': '未检测到大额交易', 'whale.noOnchain': '未发现大额链上交易',
     'whale.loaded': '巨鲸数据已更新', 'whale.error': '加载巨鲸数据失败',
     'whale.block': '区块',
+    // 巨鲸新功能
+    'whale.liquidations': '近期爆仓 (BTC + ETH)', 'whale.longLiq': '多头爆仓:', 'whale.shortLiq': '空头爆仓:',
+    'whale.liqCount': '数量:', 'whale.noLiq': '无近期爆仓', 'whale.loadingLiq': '加载爆仓数据...',
+    'whale.orderBook': '订单簿深度', 'whale.imbalance': '买卖不平衡', 'whale.bid': '买盘', 'whale.ask': '卖盘',
+    'whale.spread': '价差', 'whale.bidWalls': '买墙', 'whale.askWalls': '卖墙',
+    'whale.accDist': '巨鲸行为模式', 'whale.accumulation': '吸筹中 (聪明钱买入)',
+    'whale.distribution': '派发中 (聪明钱卖出)', 'whale.adNeutral': '中性 (无明显趋势)',
+    'whale.sentimentScore': '情绪评分', 'whale.th.liqSide': '类型',
+    'whale.confidence': '巨鲸信心指数', 'whale.updated': '更新于:',
+    'whale.smartSignals': '智能信号', 'whale.noSignals': '暂无跨模块关联信号',
+    'whale.highConf': '高', 'whale.medConf': '中',
+    'whale.factorTrade': '交易流向', 'whale.factorLiq': '爆仓', 'whale.factorOB': '订单簿', 'whale.factorOnchain': '链上',
+    'whale.confBullish': '强烈看涨', 'whale.confSlightBull': '略微看涨', 'whale.confNeutral': '中性',
+    'whale.confSlightBear': '略微看跌', 'whale.confBearish': '强烈看跌',
+    'whale.viewOnChain': '在 Blockchain.info 查看', 'whale.autoRefresh': '自动刷新: 30秒',
     // Arb
     'arb.scanner': '套利扫描', 'arb.funding': '资金费率',
     'arb.totalCoins': '扫描币种', 'arb.basisOpps': '基差机会', 'arb.volatility': '高波动',
@@ -1334,6 +2038,30 @@ var i18n = {
     'arb.change24h': '24h涨跌', 'arb.strategy': '策略',
     'arb.noOpps': '未检测到基差机会', 'arb.noVolatility': '无高波动币种',
     'arb.loaded': '套利数据已更新', 'arb.error': '加载套利数据失败',
+    // 套利新功能
+    'arb.triangular': '三角套利', 'arb.noTriArb': '未检测到三角套利机会',
+    'arb.direction': '方向', 'arb.perTenK': '每$10K收益', 'arb.legs': '路径',
+    'arb.feeAdjusted': '扣费后盈利机会', 'arb.noFeeProfit': '扣除手续费后无盈利机会',
+    'arb.feeNote': '基于$10K仓位。手续费: 现货0.1% + 合约0.04% + 滑点0.05%',
+    'arb.netROI': '净ROI', 'arb.netProfit': '净利润', 'arb.breakEven': '盈亏平衡',
+    'arb.openInterest': '持仓量', 'arb.loadingTri': '加载三角套利...', 'arb.loadingFee': '加载费用分析...',
+    'arb.updated': '更新于:', 'arb.autoRefresh': '自动刷新: 30秒', 'arb.positionSize': '仓位大小:',
+    'arb.recalc': '重新计算', 'arb.invalidSize': '无效仓位大小', 'arb.feeRecalced': '费用已重新计算',
+    'arb.feeNoteCustom': '基于 {size} 仓位。手续费: 现货0.1% + 合约0.04% + 滑点0.05%',
+    'arb.grossProfit': '毛利润', 'arb.fundingIncome': '资金费收入', 'arb.spotFee': '现货手续费',
+    'arb.futuresFee': '合约手续费', 'arb.slippage': '滑点', 'arb.totalFees': '总费用',
+    'arb.historyTitle': '基差趋势（历史）', 'arb.historyNote': '每次数据获取时记录。服务器重启后清空。',
+    'arb.avgBasis': '平均基差 %', 'arb.avgFunding': '平均资金费率 %', 'arb.profitableCount': '盈利机会数',
+    'arb.posAdvice': '头寸建议', 'arb.recSize': '建议仓位', 'arb.riskLevel': '风险',
+    'arb.hedge': '对冲', 'arb.spot': '现货', 'arb.futures': '合约', 'arb.leverage': '杠杆',
+    'arb.margin': '保证金', 'arb.liqPrice': '强平价', 'arb.monthlyROI': '月收益率',
+    'arb.compareTitle': '快速对比', 'arb.clearCompare': '清空', 'arb.compareHint': '点击币种行的 + 按钮添加对比',
+    'arb.compareEmpty': '暂无对比币种', 'arb.alreadyCompared': '已在对比列表中',
+    'arb.compareFull': '最多8个币种', 'arb.addedCompare': '已添加到对比', 'arb.noData': '无数据',
+    'arb.grade': '评级',
+    'export.success': '已导出CSV', 'export.noData': '无数据可导出',
+    'funding.settling': '正在结算!', 'funding.nextPayment': '下次资金费结算',
+    'funding.countdownNote': '资金费率每8小时结算一次', 'funding.updated': '更新于:',
     // Funding
     'funding.title': '资金费率分析', 'funding.sentimentLabel': '市场情绪',
     'funding.avgRate': '平均费率', 'funding.positive': '正费率', 'funding.negative': '负费率',
@@ -1347,7 +2075,8 @@ var i18n = {
     'whale.volume24h': '24h 成交量', 'whale.largeTrades': '币安大额交易 (>$50万)',
     'whale.loading': '加载巨鲸数据...', 'whale.loadingOnchain': '加载链上数据...',
     'whale.blockHeight': '区块高度', 'whale.blockHash': '区块哈希',
-    'whale.th.time': '时间', 'whale.th.side': '方向', 'whale.th.price': '价格',
+    'whale.liveFeed': '实时警报', 'whale.waitingAlerts': '正在监听巨鲸活动...',
+    'whale.th.time': '时间', 'whale.th.symbol': '币种', 'whale.th.side': '方向', 'whale.th.price': '价格',
     'whale.th.quantity': '数量', 'whale.th.usdValue': 'USD价值',
     'whale.th.hash': '交易哈希', 'whale.th.btcAmount': 'BTC数量', 'whale.th.size': '规模',
     // Arb HTML labels
@@ -1358,7 +2087,7 @@ var i18n = {
     'arb.loadingVolatility': '加载波动率数据...',
     'arb.th.symbol': '币种', 'arb.th.spotPrice': '现货价', 'arb.th.futuresPrice': '合约价',
     'arb.th.basis': '基差(%)', 'arb.th.fundingRate': '资金费率', 'arb.th.fundingApy': '资金年化',
-    'arb.th.dayRange': '日内波幅', 'arb.th.volume': '成交量',
+    'arb.th.dayRange': '日内波幅', 'arb.th.openInterest': '持仓量', 'arb.th.volume': '成交量',
     // Funding HTML labels
     'funding.sentiment': '情绪', 'funding.opportunities': '资金费率机会',
     'funding.rates': '全部资金费率', 'funding.loadingOpps': '加载机会...',
@@ -1561,6 +2290,12 @@ document.addEventListener('click', function(e) {
       'showArbTab': showArbTab,
       'showFundingTab': showFundingTab,
       'sendChat': sendChat,
+      'exportWhaleCSV': exportWhaleCSV,
+      'exportWhaleTrades': exportWhaleTrades,
+      'exportArbCSV': exportArbCSV,
+      'exportArbCoins': exportArbCoins,
+      'recalcFees': recalcFees,
+      'clearComparison': clearComparison,
       'mobileToggle': function() { document.querySelector('.sidebar').classList.toggle('open'); },
       'langEn': function() { setLang('en'); },
       'langZh': function() { setLang('zh'); },
@@ -1584,6 +2319,22 @@ document.addEventListener('click', function(e) {
   // Dynamic: remove alert
   var rmAlert = e.target.closest('[data-remove-alert]');
   if (rmAlert) { removeAlert(parseInt(rmAlert.dataset.removeAlert)); return; }
+
+  // Compare button on coin rows
+  var compareBtn = e.target.closest('[data-compare]');
+  if (compareBtn) { addToComparison(compareBtn.dataset.compare); return; }
+
+  // Remove from comparison
+  var rmCompare = e.target.closest('[data-rm-compare]');
+  if (rmCompare) { removeFromComparison(rmCompare.dataset.rmCompare); return; }
+
+  // Expandable opp cards
+  var expandCard = e.target.closest('.opp-card.expandable');
+  if (expandCard) { expandCard.classList.toggle('expanded'); return; }
+
+  // Sortable table headers
+  var sortTh = e.target.closest('th.sortable');
+  if (sortTh) { handleSortClick(e); return; }
 });
 
 // Nav item keyboard support (Enter/Space)
@@ -1627,8 +2378,17 @@ if (savedLang) {
   setLang('zh');
 }
 
-// Auto-refresh every 30 seconds
+// Auto-refresh every 30 seconds for all data pages
 setInterval(function() {
   var activePage = document.querySelector('.page.active');
-  if (activePage && activePage.id === 'page-dashboard') loadDashboard();
+  if (!activePage) return;
+  var id = activePage.id;
+  if (id === 'page-dashboard') loadDashboard();
+  else if (id === 'page-whale') loadWhaleData();
+  else if (id === 'page-arb') {
+    var scannerTab = document.getElementById('arb-scanner-tab');
+    if (scannerTab && scannerTab.style.display !== 'none') loadArbitrageData();
+    else loadFundingRateData();
+  }
+  else if (id === 'page-bsc') loadBSCData();
 }, 30000);
