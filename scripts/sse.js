@@ -6,7 +6,7 @@
  */
 
 const { getLogger } = require('./logger');
-const { fetchMarketData } = require('./api-client');
+const { httpGet, fetchMarketData } = require('./api-client');
 const { sendJSON } = require('./middleware');
 const db = require('./db');
 
@@ -109,6 +109,126 @@ function checkAlertsAgainstPrices(prices) {
   return triggered;
 }
 
+// ---- Whale Alert Broadcasting (every 60s) ----
+var _whaleChecking = false;
+var _lastWhaleTrades = new Set(); // deduplicate by time+symbol+usd
+
+var whaleAlertTimer = setInterval(async () => {
+  if (_whaleChecking || sseClients.size === 0) return;
+  _whaleChecking = true;
+  try {
+    // Check BTC and ETH large trades
+    var symbols = [
+      { pair: 'BTCUSDT', min: 200000 },
+      { pair: 'ETHUSDT', min: 100000 },
+    ];
+    var allAlerts = [];
+
+    var results = await Promise.all(symbols.map(function(s) {
+      return httpGet('https://api.binance.com/api/v3/aggTrades?symbol=' + s.pair + '&limit=200', { timeout: 10000, retries: 1 })
+        .then(function(trades) {
+          var alerts = [];
+          // Aggregate trades within 100ms windows
+          var current = null;
+          for (var i = 0; i < trades.length; i++) {
+            var t = trades[i];
+            var price = parseFloat(t.p);
+            var qty = parseFloat(t.q);
+            var side = t.m ? 'sell' : 'buy';
+            var ts = t.T;
+            if (current && current.side === side && Math.abs(ts - current.ts) <= 100) {
+              current.qty += qty;
+              current.usd += price * qty;
+              current.fills++;
+            } else {
+              if (current && current.usd >= s.min) {
+                var key = current.ts + '_' + s.pair + '_' + Math.round(current.usd);
+                if (!_lastWhaleTrades.has(key)) {
+                  _lastWhaleTrades.add(key);
+                  alerts.push({
+                    type: 'whale_trade',
+                    symbol: s.pair.replace('USDT', ''),
+                    side: current.side,
+                    usd: Math.round(current.usd),
+                    price: price,
+                    fills: current.fills,
+                    time: new Date(current.ts).toISOString(),
+                    tier: current.usd >= 1000000 ? 'mega' : current.usd >= 500000 ? 'large' : 'medium',
+                  });
+                }
+              }
+              current = { side: side, qty: qty, usd: price * qty, ts: ts, fills: 1 };
+            }
+          }
+          if (current && current.usd >= s.min) {
+            var lastKey = current.ts + '_' + s.pair + '_' + Math.round(current.usd);
+            if (!_lastWhaleTrades.has(lastKey)) {
+              _lastWhaleTrades.add(lastKey);
+              alerts.push({
+                type: 'whale_trade',
+                symbol: s.pair.replace('USDT', ''),
+                side: current.side,
+                usd: Math.round(current.usd),
+                price: parseFloat(trades[trades.length - 1].p),
+                fills: current.fills,
+                time: new Date(current.ts).toISOString(),
+                tier: current.usd >= 1000000 ? 'mega' : current.usd >= 500000 ? 'large' : 'medium',
+              });
+            }
+          }
+          return alerts;
+        })
+        .catch(function() { return []; });
+    }));
+
+    results.forEach(function(r) { allAlerts = allAlerts.concat(r); });
+
+    // Also check liquidations
+    try {
+      var liqData = await httpGet('https://fapi.binance.com/fapi/v1/allForceOrders?symbol=BTCUSDT&limit=10', { timeout: 8000, retries: 1 });
+      (liqData || []).forEach(function(liq) {
+        var price = parseFloat(liq.price);
+        var qty = parseFloat(liq.origQty);
+        var usd = price * qty;
+        if (usd >= 100000) {
+          var lKey = liq.time + '_liq_' + Math.round(usd);
+          if (!_lastWhaleTrades.has(lKey)) {
+            _lastWhaleTrades.add(lKey);
+            allAlerts.push({
+              type: 'liquidation',
+              symbol: 'BTC',
+              side: liq.side === 'BUY' ? 'short_liq' : 'long_liq',
+              usd: Math.round(usd),
+              price: price,
+              time: new Date(liq.time).toISOString(),
+              tier: usd >= 1000000 ? 'mega' : usd >= 500000 ? 'large' : 'medium',
+            });
+          }
+        }
+      });
+    } catch (e) { /* ignore */ }
+
+    // Broadcast whale alerts
+    if (allAlerts.length > 0 && sseClients.size > 0) {
+      var msg = 'event: whale_alert\ndata: ' + JSON.stringify(allAlerts) + '\n\n';
+      for (var client of sseClients) {
+        try { client.write(msg); } catch { sseClients.delete(client); }
+      }
+      log.info('Whale alerts broadcast', { count: allAlerts.length });
+    }
+
+    // Cleanup old keys (keep last 500)
+    if (_lastWhaleTrades.size > 500) {
+      var arr = Array.from(_lastWhaleTrades);
+      _lastWhaleTrades = new Set(arr.slice(-300));
+    }
+  } catch (err) {
+    log.debug('Whale alert check error', { error: err.message });
+  } finally {
+    _whaleChecking = false;
+  }
+}, 60000);
+
 function drainClients() {
   for (const client of sseClients) {
     try { client.write('event: shutdown\ndata: {}\n\n'); client.end(); } catch {}
@@ -120,6 +240,7 @@ module.exports = {
   handleSSE,
   heartbeatTimer,
   broadcastTimer,
+  whaleAlertTimer,
   sseClients,
   drainClients,
   onPricesUpdate,

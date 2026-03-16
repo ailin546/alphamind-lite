@@ -768,6 +768,7 @@ async function handleArbitrage(req, res) {
     };
 
     setCache('arbitrage', response, 15000);
+    recordArbSnapshot(response);
     sendJSON(res, 200, response);
   } catch (err) {
     sendJSON(res, 500, { error: 'Failed to scan arbitrage: ' + err.message });
@@ -858,10 +859,43 @@ async function handleFundingRate(req, res) {
   }
 }
 
+// ---- Arbitrage History Tracker ----
+// In-memory ring buffer of arb snapshots (kept across requests, cleared on restart)
+var _arbHistory = [];
+var MAX_ARB_HISTORY = 48; // ~12h at 15min intervals
+
+function recordArbSnapshot(data) {
+  if (!data || !data.coins) return;
+  var snapshot = {
+    time: new Date().toISOString(),
+    avgBasis: data.marketSummary.avgBasis,
+    avgFunding: data.marketSummary.avgFundingRate,
+    basisOpps: data.marketSummary.basisOppsCount,
+    fundingOpps: data.marketSummary.fundingOppsCount,
+    profitableCount: data.marketSummary.profitableAfterFeesCount,
+    totalOI: data.marketSummary.totalOpenInterest,
+    topCoins: data.coins.slice(0, 5).map(function(c) {
+      return { symbol: c.symbol, basis: c.basis, fundingRate: c.fundingRate, fundingTrend: c.fundingTrend };
+    }),
+  };
+  _arbHistory.push(snapshot);
+  if (_arbHistory.length > MAX_ARB_HISTORY) _arbHistory.shift();
+}
+
+function handleArbHistory(req, res) {
+  sendJSON(res, 200, {
+    snapshots: _arbHistory,
+    count: _arbHistory.length,
+    maxHistory: MAX_ARB_HISTORY,
+  });
+}
+
 module.exports = {
   handleWhaleAlert,
   handleArbitrage,
   handleFundingRate,
+  handleArbHistory,
+  recordArbSnapshot,
   // Exported for testing
   calculateRiskReward,
   generateStrategy,

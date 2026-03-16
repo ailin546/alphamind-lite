@@ -904,7 +904,49 @@ function connectSSE() {
       });
     } catch (ex) { /* ignore */ }
   });
+  // Whale alert real-time notifications
+  sseSource.addEventListener('whale_alert', function(e) {
+    try {
+      var whaleAlerts = JSON.parse(e.data);
+      var zh = (document.documentElement.lang === 'zh' || (window._i18nLang === 'zh'));
+      whaleAlerts.forEach(function(wa) {
+        var usdStr = wa.usd >= 1000000 ? '$' + (wa.usd / 1e6).toFixed(1) + 'M' : '$' + (wa.usd / 1e3).toFixed(0) + 'K';
+        var msg;
+        if (wa.type === 'liquidation') {
+          msg = zh
+            ? '💥 ' + wa.symbol + ' ' + (wa.side === 'long_liq' ? '多单爆仓' : '空单爆仓') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥巨额!' : '')
+            : '💥 ' + wa.symbol + ' ' + (wa.side === 'long_liq' ? 'Long Liquidated' : 'Short Liquidated') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥MEGA!' : '');
+        } else {
+          msg = zh
+            ? '🐋 ' + wa.symbol + ' ' + (wa.side === 'buy' ? '大额买入' : '大额卖出') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥巨鲸!' : wa.tier === 'large' ? ' 🦈' : '')
+            : '🐋 ' + wa.symbol + ' ' + (wa.side === 'buy' ? 'Large BUY' : 'Large SELL') + ' ' + usdStr + (wa.tier === 'mega' ? ' 🔥WHALE!' : wa.tier === 'large' ? ' 🦈' : '');
+        }
+        showToast(msg, wa.side === 'buy' ? 'success' : 'warning', wa.tier === 'mega' ? 15000 : 8000);
+        // Browser notification for mega events
+        if (wa.tier === 'mega' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('AlphaMind Whale Alert', { body: msg, icon: '/favicon.ico' });
+        }
+        // Append to whale alert feed if on whale page
+        appendWhaleAlertToFeed(wa, msg);
+      });
+    } catch (ex) { /* ignore */ }
+  });
   sseSource.onerror = function() { setTimeout(connectSSE, 5000); };
+}
+
+// Live whale alert feed on whale page
+var _whaleAlertFeed = [];
+function appendWhaleAlertToFeed(wa, msg) {
+  _whaleAlertFeed.unshift({ alert: wa, msg: msg, time: new Date() });
+  if (_whaleAlertFeed.length > 50) _whaleAlertFeed = _whaleAlertFeed.slice(0, 50);
+  var feedEl = document.getElementById('whale-live-feed');
+  if (!feedEl) return;
+  var item = document.createElement('div');
+  item.className = 'whale-feed-item' + (wa.tier === 'mega' ? ' mega-alert' : '');
+  item.innerHTML = '<span class="feed-time">' + new Date().toLocaleTimeString() + '</span> ' + escapeHtml(msg);
+  feedEl.insertBefore(item, feedEl.firstChild);
+  // Limit visible items
+  while (feedEl.children.length > 20) feedEl.removeChild(feedEl.lastChild);
 }
 
 // Request notification permission
@@ -1278,12 +1320,73 @@ async function loadArbitrageData() {
     var arbFresh = document.getElementById('arb-update-time');
     if (arbFresh) arbFresh.textContent = t('arb.updated') + ' ' + new Date().toLocaleTimeString();
 
+    // Load arb history chart (non-blocking)
+    loadArbHistoryChart();
+
     showToast(t('arb.loaded'), 'success', 2000);
   } catch (err) {
     var cont = document.getElementById('arb-scanner-tab');
     if (cont) cont.innerHTML = '<div class="card" style="text-align:center;padding:32px;color:var(--down)">' +
       '<p>' + t('arb.error') + '</p><p style="color:var(--text-dim);font-size:0.85em">' + escapeHtml(err.message) + '</p></div>';
   }
+}
+
+async function loadArbHistoryChart() {
+  try {
+    var hist = await api('/api/arb-history');
+    if (!hist.snapshots || hist.snapshots.length < 2) return;
+    var labels = hist.snapshots.map(function(s) {
+      var d = new Date(s.time);
+      return d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+    });
+    renderChart('chart-arb-history', {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: t('arb.avgBasis'),
+            data: hist.snapshots.map(function(s) { return s.avgBasis; }),
+            borderColor: '#00e676',
+            backgroundColor: 'rgba(0,230,118,0.08)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 2,
+            borderWidth: 2,
+            yAxisID: 'y',
+          },
+          {
+            label: t('arb.avgFunding'),
+            data: hist.snapshots.map(function(s) { return s.avgFunding; }),
+            borderColor: '#00b0ff',
+            borderWidth: 1.5,
+            borderDash: [5, 3],
+            pointRadius: 1,
+            fill: false,
+            tension: 0.4,
+            yAxisID: 'y',
+          },
+          {
+            label: t('arb.profitableCount'),
+            data: hist.snapshots.map(function(s) { return s.profitableCount; }),
+            borderColor: '#ffab00',
+            backgroundColor: 'rgba(255,171,0,0.15)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 1,
+            borderWidth: 1.5,
+            yAxisID: 'y1',
+          },
+        ],
+      },
+      options: {
+        scales: {
+          y: { position: 'left', title: { display: true, text: '%', color: '#8a8f98' } },
+          y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '#', color: '#8a8f98' } },
+        },
+      },
+    });
+  } catch (e) { /* ignore */ }
 }
 
 async function loadFundingRateData() {
@@ -1695,6 +1798,8 @@ var i18n = {
     'arb.feeNoteCustom': 'Based on {size} position. Fees: 0.1% spot + 0.04% futures + 0.05% slippage.',
     'arb.grossProfit': 'Gross Profit', 'arb.fundingIncome': 'Funding Income', 'arb.spotFee': 'Spot Fee',
     'arb.futuresFee': 'Futures Fee', 'arb.slippage': 'Slippage', 'arb.totalFees': 'Total Fees',
+    'arb.historyTitle': 'Basis Trend (Historical)', 'arb.historyNote': 'Records every fetch cycle. Resets on server restart.',
+    'arb.avgBasis': 'Avg Basis %', 'arb.avgFunding': 'Avg Funding %', 'arb.profitableCount': 'Profitable #',
     'export.success': 'Exported CSV', 'export.noData': 'No data to export',
     'funding.settling': 'Settling now!', 'funding.nextPayment': 'Next Funding Payment',
     'funding.countdownNote': 'Funding rates settle every 8 hours', 'funding.updated': 'Updated:',
@@ -1711,6 +1816,7 @@ var i18n = {
     'whale.volume24h': '24h Volume', 'whale.largeTrades': 'Binance Large Trades (>$500K)',
     'whale.loading': 'Loading whale data...', 'whale.loadingOnchain': 'Loading on-chain data...',
     'whale.blockHeight': 'Block Height', 'whale.blockHash': 'Block Hash',
+    'whale.liveFeed': 'Live Alert Feed', 'whale.waitingAlerts': 'Listening for whale activity...',
     'whale.th.time': 'Time', 'whale.th.symbol': 'Symbol', 'whale.th.side': 'Side', 'whale.th.price': 'Price',
     'whale.th.quantity': 'Quantity', 'whale.th.usdValue': 'USD Value',
     'whale.th.hash': 'TX Hash', 'whale.th.btcAmount': 'BTC Amount', 'whale.th.size': 'Size',
@@ -1836,6 +1942,8 @@ var i18n = {
     'arb.feeNoteCustom': '基于 {size} 仓位。手续费: 现货0.1% + 合约0.04% + 滑点0.05%',
     'arb.grossProfit': '毛利润', 'arb.fundingIncome': '资金费收入', 'arb.spotFee': '现货手续费',
     'arb.futuresFee': '合约手续费', 'arb.slippage': '滑点', 'arb.totalFees': '总费用',
+    'arb.historyTitle': '基差趋势（历史）', 'arb.historyNote': '每次数据获取时记录。服务器重启后清空。',
+    'arb.avgBasis': '平均基差 %', 'arb.avgFunding': '平均资金费率 %', 'arb.profitableCount': '盈利机会数',
     'export.success': '已导出CSV', 'export.noData': '无数据可导出',
     'funding.settling': '正在结算!', 'funding.nextPayment': '下次资金费结算',
     'funding.countdownNote': '资金费率每8小时结算一次', 'funding.updated': '更新于:',
@@ -1852,6 +1960,7 @@ var i18n = {
     'whale.volume24h': '24h 成交量', 'whale.largeTrades': '币安大额交易 (>$50万)',
     'whale.loading': '加载巨鲸数据...', 'whale.loadingOnchain': '加载链上数据...',
     'whale.blockHeight': '区块高度', 'whale.blockHash': '区块哈希',
+    'whale.liveFeed': '实时警报', 'whale.waitingAlerts': '正在监听巨鲸活动...',
     'whale.th.time': '时间', 'whale.th.symbol': '币种', 'whale.th.side': '方向', 'whale.th.price': '价格',
     'whale.th.quantity': '数量', 'whale.th.usdValue': 'USD价值',
     'whale.th.hash': '交易哈希', 'whale.th.btcAmount': 'BTC数量', 'whale.th.size': '规模',

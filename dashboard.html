@@ -567,6 +567,12 @@
     .data-freshness { text-align:center; font-size:0.8em; color:var(--text-dim); padding:8px 0; display:flex; align-items:center; justify-content:center; gap:8px }
     .freshness-dot { width:8px; height:8px; border-radius:50%; background:var(--up); display:inline-block; animation:blink 2s infinite }
     @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+    /* Whale live feed */
+    .whale-live-feed { max-height:180px; overflow-y:auto; font-size:0.85em }
+    .whale-feed-item { padding:4px 8px; border-bottom:1px solid var(--border); animation:feedSlideIn 0.3s ease-out }
+    .whale-feed-item.mega-alert { background:rgba(255,64,129,0.1); border-left:3px solid var(--accent) }
+    .feed-time { color:var(--text-dim); font-family:monospace; font-size:0.85em; margin-right:6px }
+    @keyframes feedSlideIn { from { opacity:0; transform:translateY(-8px) } to { opacity:1; transform:translateY(0) } }
     /* Export button */
     .btn-export { background:transparent; border:1px solid var(--border); color:var(--text-dim); padding:4px 12px; border-radius:6px; cursor:pointer; font-size:0.8em; transition:all 0.2s }
     .btn-export:hover { border-color:var(--primary); color:var(--primary) }
@@ -1069,6 +1075,13 @@ Ask me anything about cryptocurrency markets, for example:
           </div>
         </div>
         <div id="whale-content">
+          <!-- Live Alert Feed -->
+          <div class="card" style="margin-bottom:16px">
+            <h3 style="margin-bottom:8px" data-i18n="whale.liveFeed">Live Alert Feed</h3>
+            <div id="whale-live-feed" class="whale-live-feed">
+              <div class="whale-feed-item" style="color:var(--text-dim)" data-i18n="whale.waitingAlerts">Listening for whale activity...</div>
+            </div>
+          </div>
           <!-- Summary Stats -->
           <div class="grid-4">
             <div class="stat-card">
@@ -1337,6 +1350,15 @@ Ask me anything about cryptocurrency markets, for example:
               <div id="arb-fee-adjusted">
                 <div class="loading"><div class="spinner"></div> <span data-i18n="arb.loadingFee">Loading fee analysis...</span></div>
               </div>
+            </div>
+
+            <!-- Arb History Chart -->
+            <div class="card" style="margin-top:16px">
+              <h3 data-i18n="arb.historyTitle">Basis Trend (Historical)</h3>
+              <div style="height:200px;position:relative;margin-top:8px">
+                <canvas id="chart-arb-history"></canvas>
+              </div>
+              <div style="text-align:center;font-size:0.8em;color:var(--text-dim);margin-top:4px" data-i18n="arb.historyNote">Records every fetch cycle. Resets on server restart.</div>
             </div>
 
             <!-- Data Freshness -->

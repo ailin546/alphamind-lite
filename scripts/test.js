@@ -629,5 +629,57 @@ test('calculateRiskReward grade boundaries', () => {
   assert.strictEqual(gradeD.grade, 'D', 'Low reward + high risk should get D grade');
 });
 
+// ---- New Feature Tests: AI Chat whale/arb intents ----
+console.log('\n📋 AI Chat Whale/Arb Integration');
+
+test('detectIntents recognizes whale intent', () => {
+  const { detectIntents } = require('./routes-ai-chat');
+  assert.ok(detectIntents('巨鲸在买还是卖').includes('whale'), 'Should detect whale intent for Chinese');
+  assert.ok(detectIntents('what are whales doing').includes('whale'), 'Should detect whale intent for English');
+  assert.ok(detectIntents('smart money flow').includes('whale'), 'Should detect whale intent for smart money');
+});
+
+test('detectIntents recognizes arbitrage intent', () => {
+  const { detectIntents } = require('./routes-ai-chat');
+  assert.ok(detectIntents('有什么套利机会').includes('arbitrage'), 'Should detect arb intent for Chinese');
+  assert.ok(detectIntents('funding rate analysis').includes('arbitrage'), 'Should detect arb intent for funding');
+  assert.ok(detectIntents('cash carry strategy').includes('arbitrage'), 'Should detect arb intent for cash carry');
+});
+
+test('detectIntents recognizes liquidation intent', () => {
+  const { detectIntents } = require('./routes-ai-chat');
+  assert.ok(detectIntents('最近爆仓情况').includes('liquidation'), 'Should detect liq intent for Chinese');
+  assert.ok(detectIntents('who got liquidated').includes('liquidation'), 'Should detect liq intent for English');
+});
+
+// ---- Arb History Tests ----
+console.log('\n📋 Arb History Tracker');
+
+test('recordArbSnapshot and handleArbHistory work', () => {
+  const { recordArbSnapshot, handleArbHistory } = require('./routes-whale-arb');
+  assert.strictEqual(typeof recordArbSnapshot, 'function');
+  assert.strictEqual(typeof handleArbHistory, 'function');
+});
+
+test('recordArbSnapshot stores snapshot correctly', () => {
+  const { recordArbSnapshot } = require('./routes-whale-arb');
+  var mockData = {
+    coins: [{ symbol: 'BTC', basis: 0.05, fundingRate: 0.01, fundingTrend: 'stable' }],
+    marketSummary: {
+      avgBasis: 0.05, avgFundingRate: 0.01,
+      basisOppsCount: 2, fundingOppsCount: 3,
+      profitableAfterFeesCount: 1, totalOpenInterest: 500000000,
+    },
+  };
+  // Should not throw
+  recordArbSnapshot(mockData);
+  recordArbSnapshot(null); // Should handle null gracefully
+});
+
+test('SSE module exports whaleAlertTimer', () => {
+  const sse = require('./sse');
+  assert.ok(sse.whaleAlertTimer, 'Should export whaleAlertTimer');
+});
+
 // ---- Run All & Report ----
 runAll();

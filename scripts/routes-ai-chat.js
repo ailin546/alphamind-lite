@@ -7,7 +7,7 @@
 
 const https = require('https');
 const { fetchMarketData, fetchFearGreedIndex, fetchKlines, calculateIndicators } = require('./api-client');
-const { sendJSON, readBody } = require('./middleware');
+const { sendJSON, readBody, getCached } = require('./middleware');
 const { fmtPrice, fmtPct } = require('./utils');
 const DEMO_DATA = require('./demo-data');
 const db = require('./db');
@@ -66,9 +66,69 @@ function buildSystemPrompt(ctx, portfolio, zh) {
     });
   }
 
+  // Include whale tracking data if available
+  var whaleCache = getCached('whale');
+  if (whaleCache) {
+    prompt += zh ? `\n=== 巨鲸追踪数据 ===\n` : `\n=== Whale Tracking Data ===\n`;
+    var ws = whaleCache.summary;
+    prompt += zh
+      ? `大额交易: ${ws.tradeCount}笔 | 买入量: $${(ws.buyVolume/1e6).toFixed(1)}M | 卖出量: $${(ws.sellVolume/1e6).toFixed(1)}M | 买卖比: ${ws.buyRatio.toFixed(0)}%/${ws.sellRatio.toFixed(0)}%\n`
+      : `Large trades: ${ws.tradeCount} | Buy vol: $${(ws.buyVolume/1e6).toFixed(1)}M | Sell vol: $${(ws.sellVolume/1e6).toFixed(1)}M | Buy ratio: ${ws.buyRatio.toFixed(0)}%\n`;
+    prompt += zh
+      ? `巨鲸情绪: ${ws.sentiment === 'bullish' ? '看涨' : ws.sentiment === 'bearish' ? '看跌' : '中性'} (评分: ${ws.sentimentScore}) | 资金流向: ${ws.accumulationDistribution === 'accumulation' ? '吸筹' : ws.accumulationDistribution === 'distribution' ? '派发' : '中性'}\n`
+      : `Whale sentiment: ${ws.sentiment} (score: ${ws.sentimentScore}) | Flow: ${ws.accumulationDistribution}\n`;
+    if (whaleCache.liquidations && whaleCache.liquidations.summary) {
+      var ls = whaleCache.liquidations.summary;
+      prompt += zh
+        ? `爆仓: ${ls.totalCount}笔 | 多单爆仓: $${(ls.longLiqVolume/1e6).toFixed(2)}M | 空单爆仓: $${(ls.shortLiqVolume/1e6).toFixed(2)}M\n`
+        : `Liquidations: ${ls.totalCount} | Long liq: $${(ls.longLiqVolume/1e6).toFixed(2)}M | Short liq: $${(ls.shortLiqVolume/1e6).toFixed(2)}M\n`;
+    }
+    if (whaleCache.orderBook && whaleCache.orderBook.btc) {
+      var ob = whaleCache.orderBook.btc;
+      prompt += zh
+        ? `BTC盘口: 买盘/卖盘不平衡 ${ob.imbalance.toFixed(2)} (${ob.imbalanceSignal === 'strong_buy' ? '强买入' : ob.imbalanceSignal === 'buy' ? '买入' : ob.imbalanceSignal === 'strong_sell' ? '强卖出' : ob.imbalanceSignal === 'sell' ? '卖出' : '中性'})\n`
+        : `BTC order book: bid/ask imbalance ${ob.imbalance.toFixed(2)} (${ob.imbalanceSignal})\n`;
+    }
+  }
+
+  // Include arbitrage data if available
+  var arbCache = getCached('arbitrage');
+  if (arbCache && arbCache.marketSummary) {
+    prompt += zh ? `\n=== 套利扫描数据 ===\n` : `\n=== Arbitrage Scanner Data ===\n`;
+    var ms = arbCache.marketSummary;
+    prompt += zh
+      ? `平均基差: ${ms.avgBasis.toFixed(4)}% | 平均资金费率: ${ms.avgFundingRate.toFixed(4)}% | 基差机会: ${ms.basisOppsCount}个 | 资金费率机会: ${ms.fundingOppsCount}个\n`
+      : `Avg basis: ${ms.avgBasis.toFixed(4)}% | Avg funding: ${ms.avgFundingRate.toFixed(4)}% | Basis opps: ${ms.basisOppsCount} | Funding opps: ${ms.fundingOppsCount}\n`;
+    if (ms.bestOpportunity) {
+      prompt += zh
+        ? `最佳机会: ${ms.bestOpportunity.symbol} (评级: ${ms.bestOpportunity.grade}, 收益风险比: ${ms.bestOpportunity.ratio})\n`
+        : `Best opportunity: ${ms.bestOpportunity.symbol} (grade: ${ms.bestOpportunity.grade}, ratio: ${ms.bestOpportunity.ratio})\n`;
+    }
+    if (ms.profitableAfterFeesCount > 0) {
+      prompt += zh
+        ? `扣费后仍盈利: ${ms.profitableAfterFeesCount}个机会\n`
+        : `Profitable after fees: ${ms.profitableAfterFeesCount} opportunities\n`;
+    }
+    // Top basis opportunities
+    if (arbCache.opportunities && arbCache.opportunities.basis && arbCache.opportunities.basis.length > 0) {
+      prompt += zh ? `主要基差机会: ` : `Top basis opps: `;
+      var topBasis = arbCache.opportunities.basis.slice(0, 3);
+      prompt += topBasis.map(function(b) { return b.symbol + ' ' + b.basis.toFixed(3) + '%'; }).join(', ') + '\n';
+    }
+  }
+
+  // Include funding rate data if available
+  var fundingCache = getCached('funding-rate');
+  if (fundingCache && fundingCache.marketSentiment) {
+    var fms = fundingCache.marketSentiment;
+    prompt += zh
+      ? `资金费率情绪: ${fms.sentiment === 'bullish' ? '看涨' : fms.sentiment === 'bearish' ? '看跌' : '中性'} (正费率: ${fms.positiveCount}, 负费率: ${fms.negativeCount})\n`
+      : `Funding sentiment: ${fms.sentiment} (positive: ${fms.positiveCount}, negative: ${fms.negativeCount})\n`;
+  }
+
   prompt += zh
-    ? `\n请根据以上数据回答用户问题。提供具体数字和分析，给出可操作的建议。使用emoji增强可读性。保持简洁但全面。`
-    : `\nAnswer the user's question using the data above. Include specific numbers and analysis. Give actionable advice. Use emoji for readability. Be concise but comprehensive.`;
+    ? `\n请根据以上数据回答用户问题。提供具体数字和分析，给出可操作的建议。使用emoji增强可读性。保持简洁但全面。如果用户问到巨鲸动向、爆仓、套利或资金费率，请基于上面的实时数据回答。`
+    : `\nAnswer the user's question using the data above. Include specific numbers and analysis. Give actionable advice. Use emoji for readability. Be concise but comprehensive. If the user asks about whale activity, liquidations, arbitrage, or funding rates, use the real-time data above.`;
 
   return prompt;
 }
@@ -420,6 +480,99 @@ function generateAnalysis(msg, ctx, portfolio, history) {
     });
   }
 
+  if (intents.includes('whale')) {
+    var whaleCache = getCached('whale');
+    if (whaleCache && whaleCache.summary) {
+      var ws = whaleCache.summary;
+      if (zh) {
+        analysis += `\n**🐋 巨鲸动向分析：**\n`;
+        analysis += `• 最近大额交易: ${ws.tradeCount}笔（≥$50K: ${ws.tier100k}笔, ≥$500K: ${ws.tier500k}笔）\n`;
+        analysis += `• 买入量: $${(ws.buyVolume/1e6).toFixed(1)}M | 卖出量: $${(ws.sellVolume/1e6).toFixed(1)}M\n`;
+        analysis += `• 买卖比: 买${ws.buyRatio.toFixed(0)}% / 卖${ws.sellRatio.toFixed(0)}%\n`;
+        analysis += `• 巨鲸情绪: ${ws.sentiment === 'bullish' ? '🟢 看涨' : ws.sentiment === 'bearish' ? '🔴 看跌' : '🟡 中性'}（评分: ${ws.sentimentScore}）\n`;
+        analysis += `• 资金流向: ${ws.accumulationDistribution === 'accumulation' ? '📈 吸筹 — 大资金在买入，可能预示上涨' : ws.accumulationDistribution === 'distribution' ? '📉 派发 — 大资金在卖出，注意风险' : '📊 中性流向'}\n`;
+        if (whaleCache.orderBook && whaleCache.orderBook.btc) {
+          var ob = whaleCache.orderBook.btc;
+          analysis += `• BTC盘口: 买卖不平衡 ${ob.imbalance.toFixed(2)} (${ob.imbalanceSignal === 'strong_buy' ? '强力买盘支撑' : ob.imbalanceSignal === 'buy' ? '偏买盘' : ob.imbalanceSignal === 'strong_sell' ? '强力卖压' : ob.imbalanceSignal === 'sell' ? '偏卖盘' : '均衡'})\n`;
+        }
+        analysis += `• 💡 建议: ${ws.sentiment === 'bullish' ? '巨鲸在买入，短期看涨，可考虑跟单或加仓。' : ws.sentiment === 'bearish' ? '巨鲸在卖出，短期谨慎，考虑降低仓位。' : '等待巨鲸方向明确后再做决策。'}\n`;
+      } else {
+        analysis += `\n**🐋 Whale Activity Analysis:**\n`;
+        analysis += `• Recent large trades: ${ws.tradeCount} (≥$50K: ${ws.tier100k}, ≥$500K: ${ws.tier500k})\n`;
+        analysis += `• Buy volume: $${(ws.buyVolume/1e6).toFixed(1)}M | Sell volume: $${(ws.sellVolume/1e6).toFixed(1)}M\n`;
+        analysis += `• Buy/sell ratio: ${ws.buyRatio.toFixed(0)}% / ${ws.sellRatio.toFixed(0)}%\n`;
+        analysis += `• Whale sentiment: ${ws.sentiment === 'bullish' ? '🟢 Bullish' : ws.sentiment === 'bearish' ? '🔴 Bearish' : '🟡 Neutral'} (score: ${ws.sentimentScore})\n`;
+        analysis += `• Flow: ${ws.accumulationDistribution === 'accumulation' ? '📈 Accumulation — smart money buying' : ws.accumulationDistribution === 'distribution' ? '📉 Distribution — smart money selling' : '📊 Neutral'}\n`;
+        analysis += `• 💡 Tip: ${ws.sentiment === 'bullish' ? 'Whales are accumulating — consider entries.' : ws.sentiment === 'bearish' ? 'Whales are distributing — exercise caution.' : 'Wait for clearer whale direction.'}\n`;
+      }
+    } else {
+      analysis += zh ? `\n**🐋 巨鲸数据:** 暂无缓存数据，请先打开巨鲸追踪页面加载。\n` : `\n**🐋 Whale Data:** No cached data yet. Visit the Whale Tracker page first.\n`;
+    }
+  }
+
+  if (intents.includes('liquidation')) {
+    var whaleCache2 = getCached('whale');
+    if (whaleCache2 && whaleCache2.liquidations) {
+      var ls = whaleCache2.liquidations.summary;
+      if (zh) {
+        analysis += `\n**💥 爆仓数据分析：**\n`;
+        analysis += `• 总爆仓: ${ls.totalCount}笔\n`;
+        analysis += `• 多单爆仓: $${(ls.longLiqVolume/1e6).toFixed(2)}M (${ls.longLiqCount}笔)\n`;
+        analysis += `• 空单爆仓: $${(ls.shortLiqVolume/1e6).toFixed(2)}M (${ls.shortLiqCount}笔)\n`;
+        analysis += `• 主导方: ${ls.dominantSide === 'long_liq' ? '📉 多单爆仓为主 — 市场偏空' : '📈 空单爆仓为主 — 市场偏多'}\n`;
+        analysis += `• 💡 建议: ${ls.longLiqVolume > ls.shortLiqVolume * 2 ? '大量多单被清算，短期恐慌可能带来抄底机会。' : ls.shortLiqVolume > ls.longLiqVolume * 2 ? '大量空单被清算，短期轧空行情可能延续。' : '多空爆仓相对均衡，市场在寻找方向。'}\n`;
+      } else {
+        analysis += `\n**💥 Liquidation Analysis:**\n`;
+        analysis += `• Total: ${ls.totalCount} liquidations\n`;
+        analysis += `• Long liq: $${(ls.longLiqVolume/1e6).toFixed(2)}M (${ls.longLiqCount})\n`;
+        analysis += `• Short liq: $${(ls.shortLiqVolume/1e6).toFixed(2)}M (${ls.shortLiqCount})\n`;
+        analysis += `• Dominant: ${ls.dominantSide === 'long_liq' ? 'Long liquidations — bearish pressure' : 'Short liquidations — bullish squeeze'}\n`;
+      }
+    } else {
+      analysis += zh ? `\n**💥 爆仓数据:** 暂无数据，请先打开巨鲸追踪页面。\n` : `\n**💥 Liquidation Data:** Not loaded yet. Visit Whale Tracker page.\n`;
+    }
+  }
+
+  if (intents.includes('arbitrage')) {
+    var arbCache = getCached('arbitrage');
+    if (arbCache && arbCache.marketSummary) {
+      var ms = arbCache.marketSummary;
+      if (zh) {
+        analysis += `\n**📐 套利扫描分析：**\n`;
+        analysis += `• 扫描币种: ${ms.coinsScanned}个\n`;
+        analysis += `• 平均基差: ${ms.avgBasis.toFixed(4)}% | 平均资金费率: ${ms.avgFundingRate.toFixed(4)}%\n`;
+        analysis += `• 基差机会: ${ms.basisOppsCount}个 | 资金费率机会: ${ms.fundingOppsCount}个\n`;
+        analysis += `• 扣费后可盈利: ${ms.profitableAfterFeesCount}个机会\n`;
+        if (ms.bestOpportunity) {
+          analysis += `• 🎯 最佳机会: ${ms.bestOpportunity.symbol}（评级: ${ms.bestOpportunity.grade}, 收益风险比: ${ms.bestOpportunity.ratio}）\n`;
+        }
+        // Show top basis opportunities
+        if (arbCache.opportunities && arbCache.opportunities.basis) {
+          var topB = arbCache.opportunities.basis.slice(0, 3);
+          if (topB.length > 0) {
+            analysis += `• 主要基差:\n`;
+            topB.forEach(function(b) {
+              analysis += `  - ${b.symbol}: 基差 ${b.basis.toFixed(3)}% (${b.direction === 'premium' ? '溢价' : '折价'}) | 评级 ${b.grade}\n`;
+            });
+          }
+        }
+        analysis += `• 💡 建议: ${ms.profitableAfterFeesCount > 0 ? '有扣费后可盈利的套利机会，前往套利扫描页面查看详情。' : '当前基差较小，建议观望等待更好的机会。'}\n`;
+      } else {
+        analysis += `\n**📐 Arbitrage Scanner:**\n`;
+        analysis += `• Coins scanned: ${ms.coinsScanned}\n`;
+        analysis += `• Avg basis: ${ms.avgBasis.toFixed(4)}% | Avg funding: ${ms.avgFundingRate.toFixed(4)}%\n`;
+        analysis += `• Basis opps: ${ms.basisOppsCount} | Funding opps: ${ms.fundingOppsCount}\n`;
+        analysis += `• Profitable after fees: ${ms.profitableAfterFeesCount}\n`;
+        if (ms.bestOpportunity) {
+          analysis += `• 🎯 Best: ${ms.bestOpportunity.symbol} (grade: ${ms.bestOpportunity.grade}, ratio: ${ms.bestOpportunity.ratio})\n`;
+        }
+        analysis += `• 💡 Tip: ${ms.profitableAfterFeesCount > 0 ? 'Profitable opportunities available — check the Arbitrage Scanner.' : 'Basis spreads are thin — wait for better opportunities.'}\n`;
+      }
+    } else {
+      analysis += zh ? `\n**📐 套利数据:** 暂无缓存数据，请先打开套利扫描页面。\n` : `\n**📐 Arbitrage Data:** Not loaded yet. Visit the Arbitrage Scanner.\n`;
+    }
+  }
+
   if (intents.includes('help')) {
     if (zh) {
       analysis += `\n**我可以帮您：**\n`;
@@ -428,6 +581,9 @@ function generateAnalysis(msg, ctx, portfolio, history) {
       analysis += `• ⚠️ 风险评估 — "杠杆风险" "10倍安全吗？"\n`;
       analysis += `• 📊 定投规划 — "BTC定投策略"\n`;
       analysis += `• 🎯 持仓分析 — "分析我的持仓"\n`;
+      analysis += `• 🐋 巨鲸追踪 — "巨鲸在买还是卖？" "大额交易分析"\n`;
+      analysis += `• 📐 套利分析 — "有什么套利机会？" "基差分析"\n`;
+      analysis += `• 💥 爆仓监控 — "最近爆仓情况" "多空清算"\n`;
       analysis += `• 支持中文和英文提问！\n`;
     } else {
       analysis += `\n**I can help with:**\n`;
@@ -436,6 +592,9 @@ function generateAnalysis(msg, ctx, portfolio, history) {
       analysis += `• ⚠️ Risk management — "Check my leverage risk" "Is 10x safe?"\n`;
       analysis += `• 📊 DCA planning — "How much should I DCA into BTC?"\n`;
       analysis += `• 🎯 Portfolio review — "Review my holdings"\n`;
+      analysis += `• 🐋 Whale tracking — "What are whales doing?" "Large trades"\n`;
+      analysis += `• 📐 Arbitrage — "Any arb opportunities?" "Basis analysis"\n`;
+      analysis += `• 💥 Liquidations — "Recent liquidations" "Who got rekt?"\n`;
       analysis += `• Ask in English or 中文!\n`;
     }
   }
@@ -465,6 +624,9 @@ function detectIntents(msg) {
   if (/dca|定投|dollar.cost|averaging|invest.*monthly|每月/i.test(msg)) intents.push('dca');
   if (/portfolio|持仓|holdings|仓位.*review|我的/i.test(msg)) intents.push('portfolio');
   if (/help|帮助|怎么用|what can you|你能/i.test(msg)) intents.push('help');
+  if (/whale|巨鲸|大单|大额|鲸鱼|聪明钱|smart money|accumul|吸筹|派发/i.test(msg)) intents.push('whale');
+  if (/arb|套利|基差|funding|资金费率|cash.carry|对冲|hedge|期现/i.test(msg)) intents.push('arbitrage');
+  if (/liquidat|爆仓|清算|强平|清仓/i.test(msg)) intents.push('liquidation');
   if (/market|行情|overview|总览|how.*market|怎么样|分析|trend|走势|sentiment|fear|greed|恐慌/i.test(msg)) intents.push('market_overview');
   if (/btc|bitcoin|eth|bnb|sol|xrp|doge|比特|以太/i.test(msg) && intents.length === 0) intents.push('market_overview');
   if (intents.length === 0) intents.push('general');
